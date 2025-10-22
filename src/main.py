@@ -124,7 +124,9 @@ class PongSenseApp:
                     game_state = self.game_engine.state
                     
                     # Predict AI paddle position based on ball position
-                    ball_y_norm = game_state.ball_y / self.game_engine.window_height
+                    # Normalize ball position within the game area (not including camera view)
+                    ball_y_in_game_area = game_state.ball_y - self.game_engine.camera_height
+                    ball_y_norm = ball_y_in_game_area / self.game_engine.game_height
                     ai_target = self.ai_opponent.next_y(ball_y_norm, 'medium')
                     engine_input.p2_y = ai_target
                 

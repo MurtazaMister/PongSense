@@ -36,6 +36,8 @@ class AIOpponent:
         self.current_difficulty = 'medium'
         self.last_prediction_time = 0
         self.prediction_history = []
+        self.current_position = 0.5  # Current AI paddle position for smoothing
+        self.smoothing_factor = 0.15  # How much to smooth movement (lower = smoother)
         
         logger.info("AIOpponent initialized")
     
@@ -59,8 +61,11 @@ class AIOpponent:
             # For more responsive AI, reduce imperfections
             imperfect_target = self._add_imperfections(target_y, difficulty_factor)
             
+            # Apply smoothing to make movement less jerky
+            smoothed_target = self._apply_smoothing(imperfect_target)
+            
             # Minimal reaction delay for better gameplay
-            delayed_target = self._apply_reaction_delay(imperfect_target)
+            delayed_target = self._apply_reaction_delay(smoothed_target)
             
             # Record prediction
             self._record_prediction(target_y, imperfect_target)
@@ -88,6 +93,27 @@ class AIOpponent:
         
         return difficulty_map.get(difficulty, self.difficulty_medium)
     
+    def _apply_smoothing(self, target_y: float) -> float:
+        """Apply smoothing to AI movement to reduce jerkiness.
+        
+        Args:
+            target_y: Target y position
+            
+        Returns:
+            Smoothed y position
+        """
+        # Smooth movement by blending current position with target
+        smoothed_y = (self.smoothing_factor * target_y + 
+                     (1.0 - self.smoothing_factor) * self.current_position)
+        
+        # Update current position
+        self.current_position = smoothed_y
+        
+        # Clamp to valid range
+        smoothed_y = max(0.0, min(1.0, smoothed_y))
+        
+        return smoothed_y
+    
     def _add_imperfections(self, target_y: float, difficulty_factor: float) -> float:
         """Add human-like imperfections to AI behavior.
         
@@ -98,15 +124,15 @@ class AIOpponent:
         Returns:
             Imperfect target y position
         """
-        # Reduced imperfection amount for better AI performance
-        imperfection_amount = (1.0 - difficulty_factor) * 0.05  # Reduced from 0.2
+        # Very minimal imperfection for responsive AI
+        imperfection_amount = (1.0 - difficulty_factor) * 0.02  # Even more reduced
         
         # Add minimal random noise
         noise = np.random.normal(0, imperfection_amount)
         imperfect_y = target_y + noise
         
         # Minimal systematic bias
-        bias = np.random.normal(0, imperfection_amount * 0.3)  # Reduced from 0.5
+        bias = np.random.normal(0, imperfection_amount * 0.2)  # Even more reduced
         imperfect_y += bias
         
         # Clamp to valid range
@@ -129,12 +155,8 @@ class AIOpponent:
         delay_factor = self._get_difficulty_factor(self.current_difficulty)
         actual_delay = self.reaction_delay_ms * (1.0 - delay_factor) / 1000.0
         
-        # Simple delay simulation (in real implementation, this would be more sophisticated)
-        if current_time - self.last_prediction_time < actual_delay:
-            # Return previous prediction if within delay period
-            if self.prediction_history:
-                return self.prediction_history[-1]['imperfect_target']
-        
+        # Always update prediction time and return current target
+        # This ensures AI moves smoothly instead of getting stuck
         self.last_prediction_time = current_time
         return target_y
     
