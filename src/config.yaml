@@ -1,0 +1,52 @@
+ai:
+  difficulty_easy: 0.3
+  difficulty_hard: 0.9
+  difficulty_medium: 0.6
+  prediction_frames: 5
+  reaction_delay_ms: 50
+audio:
+  channels: 1
+  chunk_size: 1024
+  format: pyaudio.paInt16
+  sample_rate: 44100
+camera:
+  auto_exposure: true
+  device_id: 0
+  fps: 30
+  height: 480
+  width: 640
+game:
+  ball_speed_base: 5.0
+  ball_speed_multiplier: 1.0
+  difficulty_levels:
+  - easy
+  - medium
+  - hard
+  fps: 60
+  paddle_speed: 8.0
+  target_fps: 30
+  window_height: 720
+  window_width: 1280
+hand_tracking:
+  calibration_samples: 10
+  detection_confidence: 0.7
+  gesture_threshold: 0.1
+  max_hands: 2
+  min_hand_landmarks: 21
+  smoothing_factor: 0.8
+  tracking_confidence: 0.5
+performance:
+  debug_mode: false
+  enable_multithreading: true
+  enable_performance_monitoring: true
+  max_latency_ms: 100
+voice_recognition:
+  command_cooldown: 2.0
+  dynamic_energy_threshold: true
+  energy_threshold: 300
+  language: en-US
+  phrase_timeout: 0.3
+  supported_commands:
+  - faster
+  - slower
+  timeout: 1.0

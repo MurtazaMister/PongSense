@@ -1,0 +1,64 @@
+# PongSense Configuration File
+
+# Game Settings
+game:
+  window_width: 1280
+  window_height: 720
+  fps: 60
+  target_fps: 30
+  difficulty_levels: [easy, medium, hard]
+  ball_speed_base: 5.0
+  ball_speed_multiplier: 1.0
+  paddle_speed: 8.0
+  show_camera_overlay: false
+  camera_overlay_size: [320, 240]
+
+# Hand Tracking Settings
+hand_tracking:
+  detection_confidence: 0.7
+  tracking_confidence: 0.5
+  min_hand_landmarks: 21
+  gesture_threshold: 0.1
+  smoothing_factor: 0.8
+  max_hands: 2
+  calibration_samples: 10
+
+# Voice Recognition Settings
+voice_recognition:
+  language: en-US
+  timeout: 1.0
+  phrase_timeout: 0.3
+  energy_threshold: 300
+  dynamic_energy_threshold: true
+  command_cooldown: 2.0
+  supported_commands: ["faster", "slower"]
+
+# Camera Settings
+camera:
+  device_id: 0
+  width: 640
+  height: 480
+  fps: 30
+  auto_exposure: true
+
+# Audio Settings
+audio:
+  sample_rate: 44100
+  chunk_size: 1024
+  channels: 1
+  format: pyaudio.paInt16
+
+# Performance Settings
+performance:
+  max_latency_ms: 100
+  enable_multithreading: true
+  debug_mode: false
+  enable_performance_monitoring: true
+
+# AI Settings
+ai:
+  difficulty_easy: 0.3
+  difficulty_medium: 0.6
+  difficulty_hard: 0.9
+  prediction_frames: 5
+  reaction_delay_ms: 50
