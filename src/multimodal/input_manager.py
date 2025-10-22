@@ -40,6 +40,12 @@ class InputManager:
         # Previous normalized positions for smoothing
         self._prev_y_norms = {}
         
+        # Last known positions for retention when hands leave frame
+        self._last_known_positions = {
+            'p1': 0.5,  # Default center position
+            'p2': 0.5   # Default center position
+        }
+        
         logger.info("InputManager initialized")
     
     def fuse(self, vision_state: Dict[str, Any], voice_cmds: List[str], 
@@ -80,8 +86,8 @@ class InputManager:
         except Exception as e:
             logger.error(f"Error fusing inputs: {e}")
             return EngineInput(
-                p1_y=0.5,
-                p2_y=0.5,
+                p1_y=self._last_known_positions['p1'],  # Use last known position
+                p2_y=self._last_known_positions['p2'],  # Use last known position
                 speed_delta=0.0,
                 meta={'error': str(e)}
             )
@@ -101,7 +107,7 @@ class InputManager:
         
         if mode == 'single':
             # Single player mode: Use any hand gesture for Player 1, Player 2 is AI
-            p1_y = 0.5  # Default center
+            p1_y = self._last_known_positions['p1']  # Use last known position
             p2_y = 0.5  # AI will handle this
             
             # Find any hand for Player 1 (fist or open)
@@ -109,12 +115,14 @@ class InputManager:
                 gesture = player.get('gesture', 'none')
                 if gesture in ['fist', 'open']:
                     p1_y = self._normalize_player_position(player, 'p1')
+                    # Update last known position when hand is detected
+                    self._last_known_positions['p1'] = p1_y
                     break
         
         elif mode == 'two_player':
             # Two player mode: Use any hand gestures for both players
-            p1_y = 0.5
-            p2_y = 0.5
+            p1_y = self._last_known_positions['p1']  # Use last known position
+            p2_y = self._last_known_positions['p2']  # Use last known position
             
             active_players = [p for p in players if p.get('gesture', 'none') in ['fist', 'open']]
             
@@ -122,16 +130,20 @@ class InputManager:
                 # Leftmost hand = Player 1
                 leftmost_player = min(active_players, key=lambda p: p.get('x', 0))
                 p1_y = self._normalize_player_position(leftmost_player, 'p1')
+                # Update last known position when hand is detected
+                self._last_known_positions['p1'] = p1_y
                 
             if len(active_players) >= 2:
                 # Rightmost hand = Player 2
                 rightmost_player = max(active_players, key=lambda p: p.get('x', 0))
                 p2_y = self._normalize_player_position(rightmost_player, 'p2')
+                # Update last known position when hand is detected
+                self._last_known_positions['p2'] = p2_y
         
         else:
-            # Unknown mode, default positions
-            p1_y = 0.5
-            p2_y = 0.5
+            # Unknown mode, use last known positions
+            p1_y = self._last_known_positions['p1']
+            p2_y = self._last_known_positions['p2']
         
         return p1_y, p2_y
     

@@ -27,6 +27,9 @@ class PongSenseApp:
         self.ai_opponent = AIOpponent()
         self.input_manager = InputManager()
         
+        # Set AI opponent reference in game engine for pseudo-paddle system
+        self.game_engine.set_ai_opponent(self.ai_opponent)
+        
         self.is_running = False
         self.game_mode = 'single'  # 'single' or 'two_player'
         
@@ -123,11 +126,13 @@ class PongSenseApp:
                     # Get ball position from game state
                     game_state = self.game_engine.state
                     
-                    # Predict AI paddle position based on ball position
-                    # Normalize ball position within the game area (not including camera view)
+                    # Normalize ball positions for AI
                     ball_y_in_game_area = game_state.ball_y - self.game_engine.camera_height
                     ball_y_norm = ball_y_in_game_area / self.game_engine.game_height
-                    ai_target = self.ai_opponent.next_y(ball_y_norm, 'medium')
+                    ball_x_norm = game_state.ball_x / self.game_engine.window_width
+                    
+                    # Predict AI paddle position based on ball position
+                    ai_target = self.ai_opponent.next_y(ball_y_norm, 'medium', ball_x_norm)
                     engine_input.p2_y = ai_target
                 
                 # Update game

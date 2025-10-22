@@ -37,16 +37,30 @@ class AIOpponent:
         self.last_prediction_time = 0
         self.prediction_history = []
         self.current_position = 0.5  # Current AI paddle position for smoothing
-        self.smoothing_factor = 0.15  # How much to smooth movement (lower = smoother)
+        self.smoothing_factor = 0.4  # Increased for more agile movement (higher = more responsive)
+        
+        # Pseudo-paddle system for realistic AI behavior
+        self.pseudo_paddle_size = 1.5  # Pseudo-paddle is 1.5x larger than real paddle
+        self.hit_zones = {
+            'center': 0.4,      # 40% chance to hit center (perfect)
+            'top': 0.2,         # 20% chance to hit top edge
+            'bottom': 0.2,       # 20% chance to hit bottom edge
+            'pseudo_top': 0.1,   # 10% chance to hit pseudo-paddle top (miss)
+            'pseudo_bottom': 0.1 # 10% chance to hit pseudo-paddle bottom (miss)
+        }
+        self.current_hit_zone = 'center'
+        self.zone_selected_for_serve = False  # Track if zone selected for current serve
+        self.last_ball_x = 0.5  # Track ball position to detect serves
         
         logger.info("AIOpponent initialized")
     
-    def next_y(self, target_y: float, difficulty: str = 'medium') -> float:
+    def next_y(self, target_y: float, difficulty: str = 'medium', ball_x: float = None) -> float:
         """Calculate next paddle position based on target and difficulty.
         
         Args:
             target_y: Target y position (normalized 0-1)
             difficulty: AI difficulty level ('easy', 'medium', 'hard')
+            ball_x: Current ball x position (normalized 0-1) for serve detection
             
         Returns:
             Normalized y position for paddle (0-1)
@@ -55,11 +69,18 @@ class AIOpponent:
             # Update difficulty
             self.current_difficulty = difficulty
             
+            # Detect ball serve and select hit zone
+            if ball_x is not None:
+                self._detect_serve_and_select_zone(ball_x)
+            
             # Get difficulty factor
             difficulty_factor = self._get_difficulty_factor(difficulty)
             
+            # Calculate target based on selected hit zone
+            zone_adjusted_target = self._adjust_target_for_hit_zone(target_y)
+            
             # For more responsive AI, reduce imperfections
-            imperfect_target = self._add_imperfections(target_y, difficulty_factor)
+            imperfect_target = self._add_imperfections(zone_adjusted_target, difficulty_factor)
             
             # Apply smoothing to make movement less jerky
             smoothed_target = self._apply_smoothing(imperfect_target)
@@ -93,6 +114,67 @@ class AIOpponent:
         
         return difficulty_map.get(difficulty, self.difficulty_medium)
     
+    def _detect_serve_and_select_zone(self, ball_x: float) -> None:
+        """Detect ball serve and select hit zone once per serve."""
+        # Detect if ball is being served (ball is near center)
+        ball_near_center = 0.4 <= ball_x <= 0.6
+        
+        # If ball is near center and we haven't selected a zone for this serve
+        if ball_near_center and not self.zone_selected_for_serve:
+            # Select a new hit zone for this serve
+            self._select_hit_zone()
+            self.zone_selected_for_serve = True
+            logger.info(f"AI selected hit zone: {self.current_hit_zone}")
+        
+        # If ball is far from center, reset for next serve
+        elif not ball_near_center and self.zone_selected_for_serve:
+            self.zone_selected_for_serve = False
+        
+        # Update last ball position
+        self.last_ball_x = ball_x
+    
+    def _select_hit_zone(self) -> None:
+        """Select a random hit zone for the AI paddle."""
+        # Randomly select hit zone based on probabilities
+        rand = np.random.random()
+        cumulative_prob = 0.0
+        
+        for zone, prob in self.hit_zones.items():
+            cumulative_prob += prob
+            if rand <= cumulative_prob:
+                self.current_hit_zone = zone
+                break
+    
+    def _adjust_target_for_hit_zone(self, target_y: float) -> float:
+        """Adjust target position based on selected hit zone.
+        
+        Args:
+            target_y: Original target y position
+            
+        Returns:
+            Adjusted target y position
+        """
+        paddle_half_size = 0.05  # Half of paddle size in normalized coordinates
+        pseudo_paddle_half_size = paddle_half_size * self.pseudo_paddle_size
+        
+        if self.current_hit_zone == 'center':
+            # Perfect hit - aim for center
+            return target_y
+        elif self.current_hit_zone == 'top':
+            # Hit with top edge of paddle
+            return target_y - paddle_half_size
+        elif self.current_hit_zone == 'bottom':
+            # Hit with bottom edge of paddle
+            return target_y + paddle_half_size
+        elif self.current_hit_zone == 'pseudo_top':
+            # Try to hit from pseudo-paddle top (will miss)
+            return target_y - pseudo_paddle_half_size
+        elif self.current_hit_zone == 'pseudo_bottom':
+            # Try to hit from pseudo-paddle bottom (will miss)
+            return target_y + pseudo_paddle_half_size
+        else:
+            return target_y
+    
     def _apply_smoothing(self, target_y: float) -> float:
         """Apply smoothing to AI movement to reduce jerkiness.
         
@@ -124,15 +206,15 @@ class AIOpponent:
         Returns:
             Imperfect target y position
         """
-        # Very minimal imperfection for responsive AI
-        imperfection_amount = (1.0 - difficulty_factor) * 0.02  # Even more reduced
+        # Minimal imperfection for very responsive AI
+        imperfection_amount = (1.0 - difficulty_factor) * 0.01  # Further reduced for agility
         
         # Add minimal random noise
         noise = np.random.normal(0, imperfection_amount)
         imperfect_y = target_y + noise
         
         # Minimal systematic bias
-        bias = np.random.normal(0, imperfection_amount * 0.2)  # Even more reduced
+        bias = np.random.normal(0, imperfection_amount * 0.1)  # Further reduced for precision
         imperfect_y += bias
         
         # Clamp to valid range

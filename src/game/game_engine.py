@@ -93,7 +93,18 @@ class GameEngine:
         # Clock for FPS control
         self.clock = pygame.time.Clock()
         
+        # AI opponent reference for pseudo-paddle system
+        self.ai_opponent = None
+        
         logger.info("GameEngine initialized")
+    
+    def set_ai_opponent(self, ai_opponent) -> None:
+        """Set AI opponent reference for pseudo-paddle system.
+        
+        Args:
+            ai_opponent: AIOpponent instance
+        """
+        self.ai_opponent = ai_opponent
     
     def tick(self, input_state: EngineInput, voice_cmds: List[str]) -> GameState:
         """Update game state based on input and voice commands.
@@ -214,12 +225,34 @@ class GameEngine:
               self.state.ball_y <= self.state.paddle2_y + self.paddle_height + self.ball_radius and
               self.state.ball_vx > 0):
             
-            self.state.ball_x = self.window_width - self.paddle_margin - self.paddle_width - self.ball_radius
-            self.state.ball_vx = -abs(self.state.ball_vx)
-            
-            # Add spin based on hit position
-            hit_pos = (self.state.ball_y - self.state.paddle2_y) / self.paddle_height
-            self.state.ball_vy += (hit_pos - 0.5) * 3
+            # Check if AI is trying to hit from pseudo-paddle zone (miss)
+            if self._should_ai_miss():
+                # AI misses - ball passes through
+                logger.info("AI missed the ball! (pseudo-paddle zone)")
+                pass
+            else:
+                # Normal collision
+                self.state.ball_x = self.window_width - self.paddle_margin - self.paddle_width - self.ball_radius
+                self.state.ball_vx = -abs(self.state.ball_vx)
+                
+                # Add spin based on hit position
+                hit_pos = (self.state.ball_y - self.state.paddle2_y) / self.paddle_height
+                self.state.ball_vy += (hit_pos - 0.5) * 3
+    
+    def _should_ai_miss(self) -> bool:
+        """Check if AI should miss based on pseudo-paddle hit zone.
+        
+        Returns:
+            True if AI should miss, False otherwise
+        """
+        if self.ai_opponent is None:
+            return False
+        
+        # Check if AI is trying to hit from pseudo-paddle zones
+        current_zone = getattr(self.ai_opponent, 'current_hit_zone', 'center')
+        
+        # AI misses if trying to hit from pseudo-paddle zones
+        return current_zone in ['pseudo_top', 'pseudo_bottom']
     
     def _check_scoring(self) -> None:
         """Check for scoring."""
