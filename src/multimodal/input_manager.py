@@ -106,38 +106,45 @@ class InputManager:
         players = vision_state.get('players', [])
         
         if mode == 'single':
-            # Single player mode: Use any hand gesture for Player 1, Player 2 is AI
+            # Single player mode: Use primary hand (first detected fist) for Player 1, Player 2 is AI
             p1_y = self._last_known_positions['p1']  # Use last known position
             p2_y = 0.5  # AI will handle this
             
-            # Find any hand for Player 1 (fist or open)
+            # Find primary hand for Player 1 (first detected fist)
             for player in players:
-                gesture = player.get('gesture', 'none')
-                if gesture in ['fist', 'open']:
-                    p1_y = self._normalize_player_position(player, 'p1')
-                    # Update last known position when hand is detected
-                    self._last_known_positions['p1'] = p1_y
-                    break
+                if player.get('is_primary', False):
+                    gesture = player.get('gesture', 'none')
+                    if gesture in ['fist', 'open']:
+                        p1_y = self._normalize_player_position(player, 'p1')
+                        # Update last known position when primary hand is detected
+                        self._last_known_positions['p1'] = p1_y
+                        break
         
         elif mode == 'two_player':
-            # Two player mode: Use any hand gestures for both players
+            # Two player mode: Use primary hand for Player 1, any other hand for Player 2
             p1_y = self._last_known_positions['p1']  # Use last known position
             p2_y = self._last_known_positions['p2']  # Use last known position
             
             active_players = [p for p in players if p.get('gesture', 'none') in ['fist', 'open']]
             
-            if len(active_players) >= 1:
-                # Leftmost hand = Player 1
-                leftmost_player = min(active_players, key=lambda p: p.get('x', 0))
-                p1_y = self._normalize_player_position(leftmost_player, 'p1')
-                # Update last known position when hand is detected
+            # Find primary hand for Player 1
+            primary_player = None
+            other_players = []
+            
+            for player in active_players:
+                if player.get('is_primary', False):
+                    primary_player = player
+                else:
+                    other_players.append(player)
+            
+            if primary_player:
+                p1_y = self._normalize_player_position(primary_player, 'p1')
                 self._last_known_positions['p1'] = p1_y
-                
-            if len(active_players) >= 2:
-                # Rightmost hand = Player 2
-                rightmost_player = max(active_players, key=lambda p: p.get('x', 0))
-                p2_y = self._normalize_player_position(rightmost_player, 'p2')
-                # Update last known position when hand is detected
+            
+            if other_players:
+                # Use leftmost non-primary hand for Player 2
+                p2_player = min(other_players, key=lambda p: p.get('x', 0))
+                p2_y = self._normalize_player_position(p2_player, 'p2')
                 self._last_known_positions['p2'] = p2_y
         
         else:

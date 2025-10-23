@@ -48,6 +48,8 @@ class HandTracker:
         self.camera_height = config.get('camera.height', 480)
         self.camera_fps = config.get('camera.fps', 30)
         self.device_id = config.get('camera.device_id', 0)
+        
+        # Simple instant switching - whatever hand is visible is primary
     
     def start(self) -> bool:
         """Start hand tracking.
@@ -210,31 +212,34 @@ class HandTracker:
                 # Normalize y position (0 = top, 1 = bottom)
                 y_norm = landmark.y
                 
-                # Determine player ID based on position (leftmost = Player 1)
-                player_id = 1 if x < frame_shape[1] // 2 else 2
-                
                 # Basic gesture detection (simplified)
                 gesture = self._detect_gesture(hand_landmarks)
                 
+                # Simple logic: if only one hand visible, it's primary
+                # If multiple hands, leftmost is primary
+                is_primary = len(results.multi_hand_landmarks) == 1 or idx == 0
+                
                 player_data = {
-                    'id': player_id,
+                    'id': 1 if is_primary else 2,  # Primary hand = Player 1, others = Player 2
                     'y_norm': y_norm,
                     'gesture': gesture,
                     'x': x,
                     'y': y,
                     'hand_label': hand_label,
-                    'confidence': handedness.classification[0].score
+                    'confidence': handedness.classification[0].score,
+                    'hand_id': hand_label,
+                    'is_primary': is_primary
                 }
                 
                 players.append(player_data)
         
-        # Sort players by x position (leftmost first)
-        players.sort(key=lambda p: p['x'])
+        # Sort players: primary hand first, then by x position
+        players.sort(key=lambda p: (not p['is_primary'], p['x']))
         
         return players
     
     def _detect_gesture(self, hand_landmarks) -> str:
-        """Detect hand gesture (simplified version).
+        """Detect hand gesture (improved version for both hands).
         
         Args:
             hand_landmarks: MediaPipe hand landmarks
@@ -246,33 +251,54 @@ class HandTracker:
             # Get key landmarks
             thumb_tip = hand_landmarks.landmark[4]
             thumb_ip = hand_landmarks.landmark[3]
+            thumb_mcp = hand_landmarks.landmark[2]
+            
             index_tip = hand_landmarks.landmark[8]
             index_pip = hand_landmarks.landmark[6]
+            index_mcp = hand_landmarks.landmark[5]
+            
             middle_tip = hand_landmarks.landmark[12]
             middle_pip = hand_landmarks.landmark[10]
+            middle_mcp = hand_landmarks.landmark[9]
             
-            # Check if fingers are extended
-            fingers_extended = 0
+            ring_tip = hand_landmarks.landmark[16]
+            ring_pip = hand_landmarks.landmark[14]
             
-            # Thumb (compare x coordinates)
-            if thumb_tip.x > thumb_ip.x:
-                fingers_extended += 1
+            pinky_tip = hand_landmarks.landmark[20]
+            pinky_pip = hand_landmarks.landmark[18]
             
-            # Index finger
+            # Count extended fingers
+            extended_fingers = 0
+            
+            # Thumb detection - more robust for both hands
+            # Check if thumb is extended by comparing distance from palm
+            thumb_extended = abs(thumb_tip.x - thumb_mcp.x) > abs(thumb_ip.x - thumb_mcp.x)
+            if thumb_extended:
+                extended_fingers += 1
+            
+            # Index finger (compare y coordinates - tip above PIP when extended)
             if index_tip.y < index_pip.y:
-                fingers_extended += 1
+                extended_fingers += 1
             
             # Middle finger
             if middle_tip.y < middle_pip.y:
-                fingers_extended += 1
+                extended_fingers += 1
             
-            # Simple classification
-            if fingers_extended >= 2:
+            # Ring finger
+            if ring_tip.y < ring_pip.y:
+                extended_fingers += 1
+            
+            # Pinky finger
+            if pinky_tip.y < pinky_pip.y:
+                extended_fingers += 1
+            
+            # More lenient classification
+            if extended_fingers >= 3:  # 3+ fingers = open
                 return 'open'
-            elif fingers_extended == 0:
+            elif extended_fingers <= 1:  # 1 or fewer = fist
                 return 'fist'
-            else:
-                return 'none'
+            else:  # 2 fingers = ambiguous, default to open
+                return 'open'
                 
         except Exception as e:
             logger.warning(f"Error detecting gesture: {e}")
