@@ -3,3 +3,4 @@ logs/*
 *.pyc
 __pycache__/*
 test_*.py
+issues.md

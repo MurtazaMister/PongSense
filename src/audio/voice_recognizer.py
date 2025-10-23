@@ -1,37 +1,42 @@
 """
-Voice recognition module using SpeechRecognition.
+Voice recognition module using Vosk for offline speech recognition.
 Implements deterministic interface: start(), stop(), drain_commands()
 """
 
-import speech_recognition as sr
+import json
+import os
 import threading
 import time
 from typing import List, Optional
 from queue import Queue, Empty
 import pyaudio
+import vosk
 
 from utils.logger import logger
 from utils.config import config
 
 
 class VoiceRecognizer:
-    """Voice recognition with deterministic interface."""
+    """Real offline speech recognition using Vosk."""
     
     def __init__(self):
         """Initialize voice recognizer."""
-        self.recognizer = sr.Recognizer()
+        self.model = None
+        self.recognizer = None
         self.microphone = None
+        self.audio_stream = None
         self.is_running = False
         self.thread = None
         self.command_queue = Queue()
         self._lock = threading.Lock()
         
+        # Audio configuration
+        self.sample_rate = 16000  # Vosk works best with 16kHz
+        self.chunk_size = 4000    # Larger chunks for better recognition
+        self.channels = 1
+        self.format = pyaudio.paInt16
+        
         # Configuration
-        self.language = config.get('voice_recognition.language', 'en-US')
-        self.timeout = config.get('voice_recognition.timeout', 1.0)
-        self.phrase_timeout = config.get('voice_recognition.phrase_timeout', 0.3)
-        self.energy_threshold = config.get('voice_recognition.energy_threshold', 300)
-        self.dynamic_energy_threshold = config.get('voice_recognition.dynamic_energy_threshold', True)
         self.command_cooldown = config.get('voice_recognition.command_cooldown', 2.0)
         self.supported_commands = config.get('voice_recognition.supported_commands', ['faster', 'slower'])
         
@@ -39,10 +44,13 @@ class VoiceRecognizer:
         self._last_command_time = 0
         self._command_history = []
         
-        logger.info("VoiceRecognizer initialized")
+        # Model path
+        self.model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'models', 'vosk-model-small-en-us-0.15')
+        
+        logger.info("Vosk-based VoiceRecognizer initialized")
     
     def start(self) -> bool:
-        """Start voice recognition.
+        """Start offline speech recognition using Vosk.
         
         Returns:
             True if started successfully, False otherwise
@@ -52,23 +60,36 @@ class VoiceRecognizer:
                 logger.warning("Voice recognizer already running")
                 return True
             
-            # Initialize microphone
-            self.microphone = sr.Microphone()
+            # Check if model exists
+            if not os.path.exists(self.model_path):
+                logger.error(f"Vosk model not found at: {self.model_path}")
+                return False
             
-            # Adjust for ambient noise
-            with self.microphone as source:
-                logger.info("Adjusting for ambient noise...")
-                self.recognizer.adjust_for_ambient_noise(source, duration=1)
+            # Initialize Vosk model
+            logger.info(f"Loading Vosk model from: {self.model_path}")
+            self.model = vosk.Model(self.model_path)
+            self.recognizer = vosk.KaldiRecognizer(self.model, self.sample_rate)
             
-            # Configure recognizer
-            self.recognizer.energy_threshold = self.energy_threshold
-            self.recognizer.dynamic_energy_threshold = self.dynamic_energy_threshold
+            # Initialize PyAudio
+            self.microphone = pyaudio.PyAudio()
+            
+            # Open audio stream
+            self.audio_stream = self.microphone.open(
+                format=self.format,
+                channels=self.channels,
+                rate=self.sample_rate,
+                input=True,
+                frames_per_buffer=self.chunk_size
+            )
+            
+            logger.info("Vosk model loaded and microphone initialized")
             
             self.is_running = True
             self.thread = threading.Thread(target=self._recognition_loop, daemon=True)
             self.thread.start()
             
-            logger.info("Voice recognizer started successfully")
+            logger.info("Offline speech recognizer started successfully")
+            logger.info("Say 'faster' or 'slower' to control game speed")
             return True
             
         except Exception as e:
@@ -83,6 +104,17 @@ class VoiceRecognizer:
             if self.thread and self.thread.is_alive():
                 self.thread.join(timeout=2.0)
             
+            # Close audio stream
+            if self.audio_stream:
+                self.audio_stream.stop_stream()
+                self.audio_stream.close()
+                self.audio_stream = None
+            
+            # Terminate PyAudio
+            if self.microphone:
+                self.microphone.terminate()
+                self.microphone = None
+            
             # Clear command queue
             while not self.command_queue.empty():
                 try:
@@ -90,7 +122,7 @@ class VoiceRecognizer:
                 except Empty:
                     break
             
-            logger.info("Voice recognizer stopped")
+            logger.info("Offline speech recognizer stopped")
             
         except Exception as e:
             logger.error(f"Error stopping voice recognizer: {e}")
@@ -114,47 +146,44 @@ class VoiceRecognizer:
         return commands
     
     def _recognition_loop(self) -> None:
-        """Main recognition loop running in separate thread."""
-        logger.info("Voice recognition loop started")
+        """Main recognition loop using Vosk for offline speech recognition."""
+        logger.info("Vosk recognition loop started")
         
         while self.is_running:
             try:
-                # Listen for audio
-                with self.microphone as source:
-                    # Use timeout to prevent blocking
-                    audio = self.recognizer.listen(
-                        source, 
-                        timeout=self.timeout,
-                        phrase_time_limit=self.phrase_timeout
-                    )
+                # Read audio data
+                data = self.audio_stream.read(self.chunk_size, exception_on_overflow=False)
                 
-                # Recognize speech
-                try:
-                    text = self.recognizer.recognize_google(audio, language=self.language)
-                    text = text.lower().strip()
+                # Feed audio to recognizer
+                if self.recognizer.AcceptWaveform(data):
+                    # Get final result
+                    result = json.loads(self.recognizer.Result())
+                    text = result.get('text', '').strip().lower()
                     
-                    logger.debug(f"Recognized text: '{text}'")
-                    
-                    # Check if it's a supported command
-                    command = self._parse_command(text)
-                    if command:
-                        self._add_command(command)
-                    
-                except sr.UnknownValueError:
-                    # Speech was unintelligible
-                    pass
-                except sr.RequestError as e:
-                    logger.error(f"Speech recognition error: {e}")
-                    time.sleep(1)
+                    if text:
+                        logger.info(f"Recognized speech: '{text}'")
+                        
+                        # Parse command from recognized text
+                        command = self._parse_command(text)
+                        if command:
+                            self._add_command(command)
+                            logger.info(f"Voice command detected: '{command}'")
                 
-            except sr.WaitTimeoutError:
-                # Timeout waiting for speech
-                pass
+                else:
+                    # Get partial result
+                    partial_result = json.loads(self.recognizer.PartialResult())
+                    partial_text = partial_result.get('partial', '').strip().lower()
+                    
+                    if partial_text:
+                        logger.debug(f"Partial recognition: '{partial_text}'")
+                
+                time.sleep(0.01)  # Small delay to prevent excessive CPU usage
+                
             except Exception as e:
                 logger.error(f"Error in recognition loop: {e}")
                 time.sleep(0.1)
         
-        logger.info("Voice recognition loop ended")
+        logger.info("Vosk recognition loop ended")
     
     def _parse_command(self, text: str) -> Optional[str]:
         """Parse recognized text for supported commands.
@@ -170,11 +199,27 @@ class VoiceRecognizer:
             if command in text:
                 return command
         
-        # Check for partial matches or synonyms
-        if 'speed' in text or 'velocity' in text:
-            if 'up' in text or 'increase' in text or 'more' in text:
+        # Check for synonyms and variations
+        faster_words = ['faster', 'fast', 'quicker', 'quick', 'speed up', 'increase speed', 'more speed']
+        slower_words = ['slower', 'slow', 'slow down', 'decrease speed', 'less speed']
+        
+        text_lower = text.lower()
+        
+        # Check for faster variations
+        for word in faster_words:
+            if word in text_lower:
                 return 'faster'
-            elif 'down' in text or 'decrease' in text or 'less' in text:
+        
+        # Check for slower variations
+        for word in slower_words:
+            if word in text_lower:
+                return 'slower'
+        
+        # Check for context-based recognition
+        if 'speed' in text_lower or 'velocity' in text_lower:
+            if any(word in text_lower for word in ['up', 'increase', 'more', 'higher', 'boost']):
+                return 'faster'
+            elif any(word in text_lower for word in ['down', 'decrease', 'less', 'lower', 'reduce']):
                 return 'slower'
         
         return None
