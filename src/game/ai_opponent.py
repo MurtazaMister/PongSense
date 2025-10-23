@@ -38,19 +38,14 @@ class AIOpponent:
         self.prediction_history = []
         self.current_position = 0.5  # Current AI paddle position for smoothing
         self.smoothing_factor = 0.4  # Increased for more agile movement (higher = more responsive)
-        
-        # Pseudo-paddle system for realistic AI behavior
-        self.pseudo_paddle_size = 1.5  # Pseudo-paddle is 1.5x larger than real paddle
-        self.hit_zones = {
-            'center': 0.4,      # 40% chance to hit center (perfect)
-            'top': 0.2,         # 20% chance to hit top edge
-            'bottom': 0.2,       # 20% chance to hit bottom edge
-            'pseudo_top': 0.1,   # 10% chance to hit pseudo-paddle top (miss)
-            'pseudo_bottom': 0.1 # 10% chance to hit pseudo-paddle bottom (miss)
-        }
-        self.current_hit_zone = 'center'
-        self.zone_selected_for_serve = False  # Track if zone selected for current serve
-        self.last_ball_x = 0.5  # Track ball position to detect serves
+
+        # Simple miss system: miss 2 out of every 10 shots
+        self.shot_count = 0  # Track total shots
+        self.miss_count = 0   # Track misses in current 10-shot cycle
+        self.should_miss_this_shot = False  # Whether to miss current shot
+        self.last_ball_x = 0.5  # Track ball position to detect actual shots
+        self.miss_offset = 0.0  # Store the miss offset for current shot
+        self.shot_decided = False  # Track if decision made for current shot
         
         logger.info("AIOpponent initialized")
     
@@ -60,7 +55,7 @@ class AIOpponent:
         Args:
             target_y: Target y position (normalized 0-1)
             difficulty: AI difficulty level ('easy', 'medium', 'hard')
-            ball_x: Current ball x position (normalized 0-1) for serve detection
+            ball_x: Current ball x position (normalized 0-1) for shot counting
             
         Returns:
             Normalized y position for paddle (0-1)
@@ -69,18 +64,21 @@ class AIOpponent:
             # Update difficulty
             self.current_difficulty = difficulty
             
-            # Detect ball serve and select hit zone
+            # Count shots and determine if should miss
             if ball_x is not None:
-                self._detect_serve_and_select_zone(ball_x)
+                self._update_shot_count(ball_x)
             
             # Get difficulty factor
             difficulty_factor = self._get_difficulty_factor(difficulty)
             
-            # Calculate target based on selected hit zone
-            zone_adjusted_target = self._adjust_target_for_hit_zone(target_y)
+            # Adjust target if AI should miss (make it look unintentional)
+            if self.should_miss_this_shot:
+                # AI tries to hit but aims slightly off-target (use stored offset)
+                target_y = max(0.0, min(1.0, target_y + self.miss_offset))
+                # Don't log every frame - only log once per shot
             
             # For more responsive AI, reduce imperfections
-            imperfect_target = self._add_imperfections(zone_adjusted_target, difficulty_factor)
+            imperfect_target = self._add_imperfections(target_y, difficulty_factor)
             
             # Apply smoothing to make movement less jerky
             smoothed_target = self._apply_smoothing(imperfect_target)
@@ -114,66 +112,47 @@ class AIOpponent:
         
         return difficulty_map.get(difficulty, self.difficulty_medium)
     
-    def _detect_serve_and_select_zone(self, ball_x: float) -> None:
-        """Detect ball serve and select hit zone once per serve."""
-        # Detect if ball is being served (ball is near center)
-        ball_near_center = 0.4 <= ball_x <= 0.6
+    def _update_shot_count(self, ball_x: float) -> None:
+        """Update shot count and determine if AI should miss this shot."""
+        # Only count when ball crosses from player's side to AI's side (actual shot)
+        if self.last_ball_x <= 0.5 and ball_x > 0.5 and not self.shot_decided:
+            # Ball crossed center - this is a new shot
+            self.shot_count += 1
+            self.shot_decided = True
+            
+            # Determine if this shot should be a miss (decide once per shot)
+            # Miss shots 1-2 of each 10-shot cycle
+            cycle_position = (self.shot_count - 1) % 10  # 0-9
+            if cycle_position < 2:  # First 2 shots of cycle
+                self.should_miss_this_shot = True
+                self.miss_count += 1
+                # Generate miss offset once per shot
+                self.miss_offset = np.random.uniform(-0.15, 0.15)
+                logger.info(f"AI will miss shot {self.shot_count} (miss {self.miss_count}/2, offset: {self.miss_offset:.3f}, cycle_pos: {cycle_position})")
+            else:
+                self.should_miss_this_shot = False
+                self.miss_offset = 0.0
+                logger.info(f"AI will hit shot {self.shot_count} (cycle_pos: {cycle_position})")
+            
+            # Reset miss count every 10 shots
+            if self.shot_count % 10 == 0:
+                self.miss_count = 0
+                logger.info(f"Reset miss count after {self.shot_count} shots")
         
-        # If ball is near center and we haven't selected a zone for this serve
-        if ball_near_center and not self.zone_selected_for_serve:
-            # Select a new hit zone for this serve
-            self._select_hit_zone()
-            self.zone_selected_for_serve = True
-            logger.info(f"AI selected hit zone: {self.current_hit_zone}")
-        
-        # If ball is far from center, reset for next serve
-        elif not ball_near_center and self.zone_selected_for_serve:
-            self.zone_selected_for_serve = False
+        # Reset decision flag when ball goes back to player's side
+        if ball_x <= 0.5:
+            self.shot_decided = False
         
         # Update last ball position
         self.last_ball_x = ball_x
     
-    def _select_hit_zone(self) -> None:
-        """Select a random hit zone for the AI paddle."""
-        # Randomly select hit zone based on probabilities
-        rand = np.random.random()
-        cumulative_prob = 0.0
+    def should_miss(self) -> bool:
+        """Check if AI should miss the current shot.
         
-        for zone, prob in self.hit_zones.items():
-            cumulative_prob += prob
-            if rand <= cumulative_prob:
-                self.current_hit_zone = zone
-                break
-    
-    def _adjust_target_for_hit_zone(self, target_y: float) -> float:
-        """Adjust target position based on selected hit zone.
-        
-        Args:
-            target_y: Original target y position
-            
         Returns:
-            Adjusted target y position
+            True if AI should miss, False otherwise
         """
-        paddle_half_size = 0.05  # Half of paddle size in normalized coordinates
-        pseudo_paddle_half_size = paddle_half_size * self.pseudo_paddle_size
-        
-        if self.current_hit_zone == 'center':
-            # Perfect hit - aim for center
-            return target_y
-        elif self.current_hit_zone == 'top':
-            # Hit with top edge of paddle
-            return target_y - paddle_half_size
-        elif self.current_hit_zone == 'bottom':
-            # Hit with bottom edge of paddle
-            return target_y + paddle_half_size
-        elif self.current_hit_zone == 'pseudo_top':
-            # Try to hit from pseudo-paddle top (will miss)
-            return target_y - pseudo_paddle_half_size
-        elif self.current_hit_zone == 'pseudo_bottom':
-            # Try to hit from pseudo-paddle bottom (will miss)
-            return target_y + pseudo_paddle_half_size
-        else:
-            return target_y
+        return self.should_miss_this_shot
     
     def _apply_smoothing(self, target_y: float) -> float:
         """Apply smoothing to AI movement to reduce jerkiness.
