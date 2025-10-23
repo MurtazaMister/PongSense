@@ -39,9 +39,7 @@ class AIOpponent:
         self.current_position = 0.5  # Current AI paddle position for smoothing
         self.smoothing_factor = 0.4  # Increased for more agile movement (higher = more responsive)
 
-        # Simple miss system: miss 2 out of every 10 shots
-        self.shot_count = 0  # Track total shots
-        self.miss_count = 0   # Track misses in current 10-shot cycle
+        # Simple random miss system: 20% chance to miss each shot
         self.should_miss_this_shot = False  # Whether to miss current shot
         self.last_ball_x = 0.5  # Track ball position to detect actual shots
         self.miss_offset = 0.0  # Store the miss offset for current shot
@@ -117,27 +115,19 @@ class AIOpponent:
         # Only count when ball crosses from player's side to AI's side (actual shot)
         if self.last_ball_x <= 0.5 and ball_x > 0.5 and not self.shot_decided:
             # Ball crossed center - this is a new shot
-            self.shot_count += 1
             self.shot_decided = True
             
-            # Determine if this shot should be a miss (decide once per shot)
-            # Miss shots 1-2 of each 10-shot cycle
-            cycle_position = (self.shot_count - 1) % 10  # 0-9
-            if cycle_position < 2:  # First 2 shots of cycle
+            # Simple random decision: 20% chance to miss each shot
+            random_value = np.random.random()
+            if random_value < 0.2:  # 20% chance to miss
                 self.should_miss_this_shot = True
-                self.miss_count += 1
                 # Generate miss offset once per shot
                 self.miss_offset = np.random.uniform(-0.15, 0.15)
-                logger.info(f"AI will miss shot {self.shot_count} (miss {self.miss_count}/2, offset: {self.miss_offset:.3f}, cycle_pos: {cycle_position})")
+                logger.info(f"AI will miss this shot (random: {random_value:.3f} < 0.2, offset: {self.miss_offset:.3f})")
             else:
                 self.should_miss_this_shot = False
                 self.miss_offset = 0.0
-                logger.info(f"AI will hit shot {self.shot_count} (cycle_pos: {cycle_position})")
-            
-            # Reset miss count every 10 shots
-            if self.shot_count % 10 == 0:
-                self.miss_count = 0
-                logger.info(f"Reset miss count after {self.shot_count} shots")
+                logger.info(f"AI will hit this shot (random: {random_value:.3f} >= 0.2)")
         
         # Reset decision flag when ball goes back to player's side
         if ball_x <= 0.5:
