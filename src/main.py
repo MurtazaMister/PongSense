@@ -12,6 +12,7 @@ from audio.voice_recognizer import VoiceRecognizer
 from game.game_engine import GameEngine, EngineInput
 from game.ai_opponent import AIOpponent
 from multimodal.input_manager import InputManager
+from ui.home_screen import HomeScreen, HowToPlayScreen
 from utils.logger import logger
 from utils.config import config
 
@@ -30,6 +31,10 @@ class PongSenseApp:
         # Set AI opponent reference in game engine for pseudo-paddle system
         self.game_engine.set_ai_opponent(self.ai_opponent)
         
+        # Initialize UI components
+        self.home_screen = HomeScreen(self.game_engine.window_width, self.game_engine.window_height)
+        self.how_to_play_screen = HowToPlayScreen(self.game_engine.window_width, self.game_engine.window_height)
+        
         self.is_running = False
         self.game_mode = 'single'  # 'single' or 'two_player'
         
@@ -40,20 +45,8 @@ class PongSenseApp:
         try:
             logger.info("Starting PongSense...")
             
-            # Start subsystems
-            if not self._start_subsystems():
-                logger.error("Failed to start subsystems")
-                return
-            
-            # Perform calibration
-            self._perform_calibration()
-            
-            # Start game
-            self.game_engine.start_game(self.game_mode)
-            self.is_running = True
-            
-            # Main game loop
-            self._main_loop()
+            # Show home screen first
+            self._show_home_screen()
             
         except KeyboardInterrupt:
             logger.info("Application interrupted by user")
@@ -61,6 +54,57 @@ class PongSenseApp:
             logger.error(f"Application error: {e}")
         finally:
             self._cleanup()
+    
+    def _show_home_screen(self) -> None:
+        """Show home screen and handle user navigation."""
+        logger.info("Showing home screen...")
+        
+        # Set up callbacks
+        self.home_screen.set_callbacks(
+            start_game_callback=self._start_game_from_home,
+            how_to_play_callback=self._show_how_to_play
+        )
+        
+        # Run home screen
+        result = self.home_screen.run(self.game_engine.screen)
+        
+        if result == 'start_game':
+            self._start_game_from_home()
+        elif result == 'how_to_play':
+            self._show_how_to_play()
+        elif result == 'quit':
+            logger.info("User chose to quit from home screen")
+    
+    def _start_game_from_home(self) -> None:
+        """Start the game from home screen."""
+        logger.info("Starting game from home screen...")
+        
+        # Start subsystems
+        if not self._start_subsystems():
+            logger.error("Failed to start subsystems")
+            return
+        
+        # Perform calibration
+        self._perform_calibration()
+        
+        # Start game
+        self.game_engine.start_game(self.game_mode)
+        self.is_running = True
+        
+        # Main game loop
+        self._main_loop()
+    
+    def _show_how_to_play(self) -> None:
+        """Show how to play tutorial."""
+        logger.info("Showing how to play tutorial...")
+        
+        result = self.how_to_play_screen.run(self.game_engine.screen)
+        
+        if result == 'back':
+            # Return to home screen
+            self._show_home_screen()
+        elif result == 'quit':
+            logger.info("User chose to quit from tutorial")
     
     def _start_subsystems(self) -> bool:
         """Start all subsystems.
@@ -176,6 +220,9 @@ class PongSenseApp:
         logger.info("Cleaning up...")
         
         self.is_running = False
+        
+        # Cleanup UI components
+        self.how_to_play_screen.cleanup()
         
         # Stop subsystems
         self.hand_tracker.stop()

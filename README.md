@@ -4,6 +4,8 @@ A multimodal Pong game controlled by hand gestures and voice commands.
 
 ## Features
 
+- **Home Screen**: Clean interface with Start Game and How to Play buttons
+- **Tutorial System**: Interactive slideshow with video demonstrations
 - **Hand Gesture Control**: Track fist movements to control paddle position
 - **Voice Commands**: "faster" and "slower" commands to control ball speed
 - **Single-Player Mode**: Play against AI opponent
@@ -52,9 +54,19 @@ cd src
 python main.py
 ```
 
-2. Calibration will happen automatically for 3 seconds when the game starts.
+2. **Home Screen**: You'll see a welcome screen with two options:
+   - **Start Game**: Begin playing immediately
+   - **How to Play**: View interactive tutorial with video demonstrations
 
-3. Game controls:
+3. **How to Play Tutorial**: 
+   - **Slide 1**: Video demonstration of hand control (close fist and move arm up/down)
+   - **Slide 2**: Voice commands explanation ("faster" and "slower")
+   - Use navigation buttons or arrow keys to move between slides
+   - Click "Play" to start video demonstrations
+
+4. Calibration will happen automatically for 3 seconds when the game starts.
+
+5. Game controls:
    - **Hand gestures**: Move your fist up/down to control paddle position
    - **Voice commands**: Say "faster" or "slower" to control ball speed
    - **Keyboard**: 
