@@ -29,6 +29,8 @@ class GameState:
     ball_speed_multiplier: float
     frame_count: int
     timestamp: float
+    is_paused: bool = False
+    pause_menu_selection: int = 0  # 0 = Resume, 1 = End game
 
 
 @dataclass
@@ -72,7 +74,9 @@ class GameEngine:
             game_mode='single',
             ball_speed_multiplier=1.0,
             frame_count=0,
-            timestamp=time.time()
+            timestamp=time.time(),
+            is_paused=False,
+            pause_menu_selection=0
         )
         
         # Game constants
@@ -124,20 +128,22 @@ class GameEngine:
             self.state.timestamp = time.time()
             self.state.frame_count += 1
             
-            # Process voice commands
-            self._process_voice_commands(voice_cmds)
-            
-            # Update paddles based on input
-            self._update_paddles(input_state)
-            
-            # Update ball physics
-            self._update_ball()
-            
-            # Check collisions
-            self._check_collisions()
-            
-            # Check scoring
-            self._check_scoring()
+            # Skip game updates if paused
+            if not self.state.is_paused:
+                # Process voice commands
+                self._process_voice_commands(voice_cmds)
+                
+                # Update paddles based on input
+                self._update_paddles(input_state)
+                
+                # Update ball physics
+                self._update_ball()
+                
+                # Check collisions
+                self._check_collisions()
+                
+                # Check scoring
+                self._check_scoring()
             
             # Control FPS
             self.clock.tick(self.target_fps)
@@ -400,6 +406,10 @@ class GameEngine:
         # Draw caption bar with last recognized text
         self._draw_caption_bar(last_recognized_text, last_word_timestamp)
         
+        # Draw pause menu if paused
+        if self.state.is_paused:
+            self._draw_pause_menu()
+        
         # Update display
         pygame.display.flip()
     
@@ -588,6 +598,7 @@ class GameEngine:
         self.state.score1 = 0
         self.state.score2 = 0
         self.state.ball_speed_multiplier = 1.0
+        self.state.is_paused = False  # Ensure game starts unpaused
         self._reset_ball()
         
         logger.info(f"Game started in {mode} mode")
@@ -596,6 +607,120 @@ class GameEngine:
         """Stop the current game."""
         self.state.game_running = False
         logger.info("Game stopped")
+    
+    def pause_game(self) -> None:
+        """Toggle pause state of the game."""
+        if self.state.is_paused:
+            # If already paused, resume
+            self.state.is_paused = False
+            logger.info("Game resumed")
+        else:
+            # Pause the game
+            self.state.is_paused = True
+            self.state.pause_menu_selection = 0
+            logger.info("Game paused")
+    
+    def resume_game(self) -> None:
+        """Resume the paused game."""
+        self.state.is_paused = False
+        logger.info("Game resumed")
+    
+    def handle_pause_menu_input(self, key, mouse_pos=None) -> str:
+        """Handle keyboard input for pause menu.
+        
+        Args:
+            key: pygame key constant or None for mouse
+            mouse_pos: Tuple of (x, y) mouse position if mouse click
+            
+        Returns:
+            'resume' to resume game, 'end' to end game, or None
+        """
+        # Handle mouse clicks
+        if mouse_pos and key is None:
+            mouse_x, mouse_y = mouse_pos
+            # Check if click is within menu bounds
+            menu_width = 400
+            menu_height = 200
+            menu_x = (self.window_width - menu_width) // 2
+            menu_y = (self.window_height - menu_height) // 2
+            
+            if (menu_x <= mouse_x <= menu_x + menu_width and 
+                menu_y + 80 <= mouse_y <= menu_y + menu_height - 30):
+                # Determine which option was clicked
+                click_y = mouse_y - (menu_y + 80)
+                clicked_option = click_y // 50
+                
+                if clicked_option == 0:
+                    return 'resume'
+                elif clicked_option == 1:
+                    return 'end'
+        
+        # Handle keyboard input
+        if key == pygame.K_UP:
+            self.state.pause_menu_selection = 0
+        elif key == pygame.K_DOWN:
+            self.state.pause_menu_selection = 1
+        elif key == pygame.K_RETURN or key == pygame.K_KP_ENTER:
+            if self.state.pause_menu_selection == 0:
+                return 'resume'
+            else:
+                return 'end'
+        elif key == pygame.K_ESCAPE:
+            # ESC toggles pause
+            self.resume_game()
+        return None
+    
+    def _draw_pause_menu(self) -> None:
+        """Draw the pause menu overlay."""
+        # Create semi-transparent overlay
+        overlay = pygame.Surface((self.window_width, self.window_height))
+        overlay.set_alpha(200)  # Semi-transparent black
+        overlay.fill(self.BLACK)
+        self.screen.blit(overlay, (0, 0))
+        
+        # Draw menu background
+        menu_width = 400
+        menu_height = 200
+        menu_x = (self.window_width - menu_width) // 2
+        menu_y = (self.window_height - menu_height) // 2
+        
+        # Menu background
+        pygame.draw.rect(self.screen, (40, 40, 40), 
+                        (menu_x, menu_y, menu_width, menu_height))
+        pygame.draw.rect(self.screen, self.WHITE,
+                        (menu_x, menu_y, menu_width, menu_height), 3)
+        
+        # Title
+        title_font = pygame.font.Font(None, 48)
+        title_text = title_font.render("PAUSED", True, self.WHITE)
+        title_x = menu_x + (menu_width - title_text.get_width()) // 2
+        self.screen.blit(title_text, (title_x, menu_y + 30))
+        
+        # Menu options
+        menu_font = pygame.font.Font(None, 36)
+        options = ["Resume Game", "End Game"]
+        
+        for i, option in enumerate(options):
+            if i == self.state.pause_menu_selection:
+                # Highlight selected option
+                pygame.draw.rect(self.screen, (100, 100, 100),
+                               (menu_x + 20, menu_y + 80 + i * 50, 
+                                menu_width - 40, 40))
+                color = self.WHITE
+            else:
+                color = (180, 180, 180)
+            
+            option_text = menu_font.render(option, True, color)
+            text_x = menu_x + (menu_width - option_text.get_width()) // 2
+            self.screen.blit(option_text, (text_x, menu_y + 85 + i * 50))
+        
+        # Instructions
+        instruction_font = pygame.font.Font(None, 24)
+        instructions = ["Arrow keys to navigate, Enter to select"]
+        for i, instruction in enumerate(instructions):
+            inst_text = instruction_font.render(instruction, True, (150, 150, 150))
+            inst_x = menu_x + (menu_width - inst_text.get_width()) // 2
+            self.screen.blit(inst_text, (inst_x, menu_y + menu_height - 30))
     
     def quit(self) -> None:
         """Quit the game engine."""

@@ -92,7 +92,11 @@ class PongSenseApp:
         self.is_running = True
         
         # Main game loop
-        self._main_loop()
+        result = self._main_loop()
+        if result == 'home':
+            # Cleanup everything and return to home
+            self._cleanup_game_resources()
+            self._show_home_screen()
     
     def _show_how_to_play(self) -> None:
         """Show how to play tutorial."""
@@ -114,13 +118,16 @@ class PongSenseApp:
         """
         success = True
         
-        # Start hand tracking
-        if not self.hand_tracker.start():
+        # Check if subsystems are already running
+        if hasattr(self.hand_tracker, 'is_running') and self.hand_tracker.is_running:
+            logger.info("Hand tracker already running")
+        elif not self.hand_tracker.start():
             logger.error("Failed to start hand tracker")
             success = False
         
-        # Start voice recognition
-        if not self.voice_recognizer.start():
+        if hasattr(self.voice_recognizer, 'is_running') and self.voice_recognizer.is_running:
+            logger.info("Voice recognizer already running")
+        elif not self.voice_recognizer.start():
             logger.error("Failed to start voice recognizer")
             success = False
         
@@ -147,7 +154,7 @@ class PongSenseApp:
         
         logger.info("Calibration completed")
     
-    def _main_loop(self) -> None:
+    def _main_loop(self):
         """Main game loop."""
         logger.info("Starting main game loop...")
         
@@ -164,11 +171,11 @@ class PongSenseApp:
                 last_recognized_text = self.voice_recognizer.get_last_recognized_text()
                 last_word_timestamp = self.voice_recognizer.get_last_word_timestamp()
                 
-                # Fuse inputs
+                # Create dummy input for paused state
                 engine_input = self.input_manager.fuse(vision_state, voice_commands, self.game_mode)
                 
                 # Handle AI opponent in single player mode
-                if self.game_mode == 'single':
+                if self.game_mode == 'single' and not self.game_engine.state.is_paused:
                     # Get ball position from game state
                     game_state = self.game_engine.state
                     
@@ -181,7 +188,7 @@ class PongSenseApp:
                     ai_target = self.ai_opponent.next_y(ball_y_norm, 'medium', ball_x_norm)
                     engine_input.p2_y = ai_target
                 
-                # Update game
+                # Update game (tick will skip updates if paused)
                 game_state = self.game_engine.tick(engine_input, voice_commands)
                 
                 # Render with integrated camera view
@@ -189,7 +196,10 @@ class PongSenseApp:
                 self.game_engine.render_with_camera_view(camera_frame, vision_state, last_recognized_text, last_word_timestamp)
                 
                 # Check for exit conditions
-                self._handle_events()
+                event_result = self._handle_events()
+                if event_result == 'home':
+                    # Exit the main loop immediately
+                    return 'home'
                 
             except Exception as e:
                 logger.error(f"Error in main loop: {e}")
@@ -200,7 +210,7 @@ class PongSenseApp:
             if sleep_time > 0:
                 time.sleep(sleep_time)
     
-    def _handle_events(self) -> None:
+    def _handle_events(self):
         """Handle application events."""
         # Check for pygame events
         import pygame
@@ -209,16 +219,53 @@ class PongSenseApp:
             if event.type == pygame.QUIT:
                 self.is_running = False
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    self.is_running = False
-                elif event.key == pygame.K_SPACE:
-                    # Toggle game mode
-                    self.game_mode = 'two_player' if self.game_mode == 'single' else 'single'
-                    self.game_engine.start_game(self.game_mode)
-                    logger.info(f"Switched to {self.game_mode} mode")
+                # Handle pause menu if game is paused
+                if self.game_engine.state.is_paused:
+                    result = self.game_engine.handle_pause_menu_input(event.key)
+                    if result == 'resume':
+                        self.game_engine.resume_game()
+                    elif result == 'end':
+                        # End game and exit loop to return to home
+                        return 'home'
+                else:
+                    # Normal game input handling
+                    if event.key == pygame.K_ESCAPE:
+                        # Toggle pause/resume
+                        self.game_engine.pause_game()
+                    elif event.key == pygame.K_SPACE:
+                        # Toggle game mode (only when not paused)
+                        self.game_mode = 'two_player' if self.game_mode == 'single' else 'single'
+                        self.game_engine.start_game(self.game_mode)
+                        logger.info(f"Switched to {self.game_mode} mode")
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                # Handle mouse clicks on pause menu
+                if self.game_engine.state.is_paused:
+                    mouse_pos = pygame.mouse.get_pos()
+                    result = self.game_engine.handle_pause_menu_input(None, mouse_pos)
+                    if result == 'resume':
+                        self.game_engine.resume_game()
+                    elif result == 'end':
+                        # End game and exit loop to return to home
+                        return 'home'
+        
+        # Default: no special action
+        return None
+    
+    def _cleanup_game_resources(self) -> None:
+        """Cleanup all game resources and stop subsystems."""
+        logger.info("Cleaning up game resources...")
+        
+        # Stop subsystems completely
+        self.hand_tracker.stop()
+        self.voice_recognizer.stop()
+        
+        # Stop the game
+        self.game_engine.stop_game()
+        
+        logger.info("Game resources cleaned up - subsystems stopped")
     
     def _cleanup(self) -> None:
-        """Cleanup resources."""
+        """Cleanup all resources."""
         logger.info("Cleaning up...")
         
         self.is_running = False
