@@ -38,7 +38,7 @@ class VoiceRecognizer:
         
         # Configuration
         self.command_cooldown = config.get('voice_recognition.command_cooldown', 2.0)
-        self.supported_commands = config.get('voice_recognition.supported_commands', ['faster', 'slower'])
+        self.supported_commands = config.get('voice_recognition.supported_commands', ['faster', 'slower', 'pause', 'stop', 'resume', 'play', 'exit'])
         
         # Command tracking
         self._last_command_time = 0
@@ -211,6 +211,9 @@ class VoiceRecognizer:
         # Check for synonyms and variations
         faster_words = ['faster', 'fast', 'quicker', 'quick', 'speed up', 'increase speed', 'more speed']
         slower_words = ['slower', 'slow', 'slow down', 'decrease speed', 'less speed']
+        pause_words = ['pause', 'stop', 'hold', 'freeze', 'wait']
+        resume_words = ['resume', 'play', 'continue', 'start', 'go', 'unpause']
+        exit_words = ['exit', 'quit', 'leave', 'end', 'close']
         
         text_lower = text.lower()
         
@@ -223,6 +226,21 @@ class VoiceRecognizer:
         for word in slower_words:
             if word in text_lower:
                 return 'slower'
+        
+        # Check for pause variations
+        for word in pause_words:
+            if word in text_lower:
+                return 'pause'
+        
+        # Check for resume variations
+        for word in resume_words:
+            if word in text_lower:
+                return 'resume'
+        
+        # Check for exit variations
+        for word in exit_words:
+            if word in text_lower:
+                return 'exit'
         
         # Check for context-based recognition
         if 'speed' in text_lower or 'velocity' in text_lower:

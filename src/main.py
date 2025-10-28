@@ -191,6 +191,12 @@ class PongSenseApp:
                 # Update game (tick will skip updates if paused)
                 game_state = self.game_engine.tick(engine_input, voice_commands)
                 
+                # Check if exit was requested by voice command
+                if game_state.exit_requested_by_voice:
+                    # Reset the flag and return to home
+                    game_state.exit_requested_by_voice = False
+                    return 'home'
+                
                 # Render with integrated camera view
                 camera_frame = vision_state.get('frame')
                 self.game_engine.render_with_camera_view(camera_frame, vision_state, last_recognized_text, last_word_timestamp)

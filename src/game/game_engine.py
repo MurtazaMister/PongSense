@@ -31,6 +31,7 @@ class GameState:
     timestamp: float
     is_paused: bool = False
     pause_menu_selection: int = 0  # 0 = Resume, 1 = End game
+    exit_requested_by_voice: bool = False  # True when voice command 'exit' is detected
 
 
 @dataclass
@@ -76,7 +77,8 @@ class GameEngine:
             frame_count=0,
             timestamp=time.time(),
             is_paused=False,
-            pause_menu_selection=0
+            pause_menu_selection=0,
+            exit_requested_by_voice=False
         )
         
         # Game constants
@@ -96,6 +98,9 @@ class GameEngine:
         self.RED = (255, 0, 0)
         self.GREEN = (0, 255, 0)
         self.BLUE = (0, 0, 255)
+        self.YELLOW = (255, 255, 0)
+        self.CYAN = (0, 255, 255)
+        self.MAGENTA = (255, 0, 255)
         
         # Clock for FPS control
         self.clock = pygame.time.Clock()
@@ -128,11 +133,11 @@ class GameEngine:
             self.state.timestamp = time.time()
             self.state.frame_count += 1
             
+            # Process voice commands (works both when paused and unpaused)
+            self._process_voice_commands(voice_cmds)
+            
             # Skip game updates if paused
             if not self.state.is_paused:
-                # Process voice commands
-                self._process_voice_commands(voice_cmds)
-                
                 # Update paddles based on input
                 self._update_paddles(input_state)
                 
@@ -155,7 +160,7 @@ class GameEngine:
             return self.state
     
     def _process_voice_commands(self, voice_cmds: List[str]) -> None:
-        """Process voice commands for ball speed control.
+        """Process voice commands for ball speed control and pause/resume.
         
         Args:
             voice_cmds: List of voice commands
@@ -167,6 +172,22 @@ class GameEngine:
             elif cmd == 'slower':
                 self.state.ball_speed_multiplier = max(0.5, self.state.ball_speed_multiplier - 0.2)
                 logger.info(f"Ball speed decreased to {self.state.ball_speed_multiplier}")
+            elif cmd == 'pause' or cmd == 'stop':
+                # Pause the game if not already paused
+                if not self.state.is_paused:
+                    self.state.is_paused = True
+                    self.state.pause_menu_selection = 0
+                    logger.info("Game paused via voice command")
+            elif cmd == 'resume' or cmd == 'play':
+                # Resume the game if paused
+                if self.state.is_paused:
+                    self.state.is_paused = False
+                    logger.info("Game resumed via voice command")
+            elif cmd == 'exit':
+                # Exit game - only works when paused
+                if self.state.is_paused:
+                    self.state.exit_requested_by_voice = True
+                    logger.info("Exit requested via voice command")
     
     def _update_paddles(self, input_state: EngineInput) -> None:
         """Update paddle positions based on input."""
@@ -584,6 +605,24 @@ class GameEngine:
             if slow_word in word_lower:
                 return self.RED
         
+        # Words that indicate pause/stop - YELLOW
+        pause_words = ['pause', 'stop', 'hold', 'freeze', 'wait']
+        for pause_word in pause_words:
+            if pause_word in word_lower:
+                return self.YELLOW
+        
+        # Words that indicate resume/play - CYAN
+        resume_words = ['resume', 'play', 'continue', 'start', 'go', 'unpause']
+        for resume_word in resume_words:
+            if resume_word in word_lower:
+                return self.CYAN
+        
+        # Words that indicate exit/quit - MAGENTA
+        exit_words = ['exit', 'quit', 'leave', 'end', 'close']
+        for exit_word in exit_words:
+            if exit_word in word_lower:
+                return self.MAGENTA
+        
         # Default color for other words
         return self.WHITE
     
@@ -599,6 +638,7 @@ class GameEngine:
         self.state.score2 = 0
         self.state.ball_speed_multiplier = 1.0
         self.state.is_paused = False  # Ensure game starts unpaused
+        self.state.exit_requested_by_voice = False  # Reset exit flag
         self._reset_ball()
         
         logger.info(f"Game started in {mode} mode")

@@ -31,7 +31,7 @@ voice_recognition:
   energy_threshold: 300
   dynamic_energy_threshold: true
   command_cooldown: 2.0
-  supported_commands: ["faster", "slower"]
+  supported_commands: ["faster", "slower", "pause", "stop", "resume", "play", "exit"]
 
 # Camera Settings
 camera:
