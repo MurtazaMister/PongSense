@@ -201,10 +201,16 @@ class HowToPlayScreen:
                 'description': 'Use your hand gestures to control the paddle position. Make a fist and move your arm vertically to move the paddle up and down.'
             },
             {
-                'title': 'Slide 2: Voice Commands',
+                'title': 'Slide 2: Speed Control',
                 'video_path': None,
                 'text': 'Speak "faster" or "slower" to increase/decrease ball speed',
                 'description': 'Use voice commands to control the game speed. Say "faster" to increase ball speed or "slower" to decrease it.'
+            },
+            {
+                'title': 'Slide 3: Pause & Resume',
+                'video_path': None,
+                'text': 'Say "pause" or "stop" to pause, "resume" or "play" to continue',
+                'description': 'Voice commands work in-game: "pause"/"stop" pauses the game with menu, "resume"/"play" unpauses. Say "exit"/"quit"/"leave" when paused to return to home.'
             }
         ]
         
@@ -413,8 +419,15 @@ class HowToPlayScreen:
         
         pygame.draw.rect(screen, self.GRAY, (placeholder_x, placeholder_y, placeholder_width, placeholder_height))
         
-        # Draw icon or text
-        icon_text = self.text_font.render("Voice Commands", True, self.WHITE)
+        # Draw icon or text based on current slide
+        slide = self.slides[self.current_slide]
+        if slide['title'] == 'Slide 2: Speed Control':
+            icon_text = self.text_font.render("🎤 Speed Commands", True, self.WHITE)
+        elif slide['title'] == 'Slide 3: Pause & Resume':
+            icon_text = self.text_font.render("🎤 Game Control", True, self.WHITE)
+        else:
+            icon_text = self.text_font.render("Voice Commands", True, self.WHITE)
+        
         icon_rect = icon_text.get_rect(center=(placeholder_x + placeholder_width // 2, placeholder_y + placeholder_height // 2))
         screen.blit(icon_text, icon_rect)
     
