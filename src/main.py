@@ -161,6 +161,8 @@ class PongSenseApp:
                 # Get current states
                 vision_state = self.hand_tracker.get_state()
                 voice_commands = self.voice_recognizer.drain_commands()
+                last_recognized_text = self.voice_recognizer.get_last_recognized_text()
+                last_word_timestamp = self.voice_recognizer.get_last_word_timestamp()
                 
                 # Fuse inputs
                 engine_input = self.input_manager.fuse(vision_state, voice_commands, self.game_mode)
@@ -184,7 +186,7 @@ class PongSenseApp:
                 
                 # Render with integrated camera view
                 camera_frame = vision_state.get('frame')
-                self.game_engine.render_with_camera_view(camera_frame, vision_state)
+                self.game_engine.render_with_camera_view(camera_frame, vision_state, last_recognized_text, last_word_timestamp)
                 
                 # Check for exit conditions
                 self._handle_events()

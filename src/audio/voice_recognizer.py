@@ -43,6 +43,9 @@ class VoiceRecognizer:
         # Command tracking
         self._last_command_time = 0
         self._command_history = []
+        self._last_recognized_text = ''  # Track the last recognized text for caption display
+        self._last_command_word = ''  # Track the specific word that triggered a command
+        self._last_word_timestamp = 0  # Track when the word was recognized for fade-out
         
         # Model path
         self.model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'models', 'vosk-model-small-en-us-0.15')
@@ -163,9 +166,15 @@ class VoiceRecognizer:
                     if text:
                         logger.info(f"Recognized speech: '{text}'")
                         
+                        # Store the last recognized text for caption display
+                        self._last_recognized_text = text
+                        
                         # Parse command from recognized text
                         command = self._parse_command(text)
                         if command:
+                            # Find and store the specific word that triggered the command
+                            self._last_command_word = self._find_command_word(text, command)
+                            self._last_word_timestamp = time.time()  # Record timestamp for fade-out
                             self._add_command(command)
                             logger.info(f"Voice command detected: '{command}'")
                 
@@ -269,3 +278,41 @@ class VoiceRecognizer:
         """Clear command history."""
         self._command_history.clear()
         logger.info("Command history cleared")
+    
+    def get_last_recognized_text(self) -> str:
+        """Get the last recognized text for caption display.
+        
+        Returns:
+            Last recognized text/word
+        """
+        # Return the specific command word if available, otherwise return the last recognized text
+        return self._last_command_word if self._last_command_word else self._last_recognized_text
+    
+    def get_last_word_timestamp(self) -> float:
+        """Get the timestamp when the last word was recognized.
+        
+        Returns:
+            Timestamp of the last recognized word
+        """
+        return self._last_word_timestamp
+    
+    def _find_command_word(self, text: str, command: str) -> str:
+        """Find the specific word in the text that matched the command.
+        
+        Args:
+            text: The full recognized text
+            command: The extracted command ('faster' or 'slower')
+            
+        Returns:
+            The specific word that triggered the command
+        """
+        words = text.lower().split()
+        command_lower = command.lower()
+        
+        # Look for the command word in the text
+        for word in words:
+            if command_lower in word or word in command_lower:
+                return word
+        
+        # Fall back to command if not found
+        return command

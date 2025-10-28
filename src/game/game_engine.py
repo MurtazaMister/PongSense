@@ -54,7 +54,9 @@ class GameEngine:
         
         # Camera view configuration
         self.camera_height = 200  # Height for camera view at top
-        self.game_height = self.window_height - self.camera_height  # Remaining height for game
+        self.caption_height = 40  # Height for caption bar at bottom
+        # Game area = total height - camera - caption bar
+        self.game_height = self.window_height - self.camera_height - self.caption_height
         
         # Game state
         self.state = GameState(
@@ -88,6 +90,7 @@ class GameEngine:
         self.BLACK = (0, 0, 0)
         self.WHITE = (255, 255, 255)
         self.RED = (255, 0, 0)
+        self.GREEN = (0, 255, 0)
         self.BLUE = (0, 0, 255)
         
         # Clock for FPS control
@@ -172,9 +175,9 @@ class GameEngine:
         # Player 2 paddle (or AI) - direct control
         self.state.paddle2_y = paddle2_target
         
-        # Keep paddles in bounds (within game area)
+        # Keep paddles in bounds (within game area, excluding caption bar)
         min_y = self.camera_height
-        max_y = self.window_height - self.paddle_height
+        max_y = self.window_height - self.caption_height - self.paddle_height
         self.state.paddle1_y = max(min_y, min(max_y, self.state.paddle1_y))
         self.state.paddle2_y = max(min_y, min(max_y, self.state.paddle2_y))
     
@@ -199,8 +202,9 @@ class GameEngine:
         if self.state.ball_y <= self.camera_height + self.ball_radius:
             self.state.ball_y = self.camera_height + self.ball_radius
             self.state.ball_vy = abs(self.state.ball_vy)
-        elif self.state.ball_y >= self.window_height - self.ball_radius:
-            self.state.ball_y = self.window_height - self.ball_radius
+        # Bottom boundary: window height - caption bar - ball radius
+        elif self.state.ball_y >= self.window_height - self.caption_height - self.ball_radius:
+            self.state.ball_y = self.window_height - self.caption_height - self.ball_radius
             self.state.ball_vy = -abs(self.state.ball_vy)
         
         # Paddle collisions
@@ -344,7 +348,7 @@ class GameEngine:
         # Update display
         pygame.display.flip()
     
-    def render_with_camera_view(self, camera_frame, hand_data) -> None:
+    def render_with_camera_view(self, camera_frame, hand_data, last_recognized_text: str = '', last_word_timestamp: float = 0) -> None:
         """Render the game frame with integrated camera view at top."""
         # Clear screen
         self.screen.fill(self.BLACK)
@@ -372,10 +376,11 @@ class GameEngine:
                           (int(self.state.ball_x), int(self.state.ball_y)), 
                           self.ball_radius)
         
-        # Draw center line in game area
+        # Draw center line in game area (stops at caption bar)
+        game_bottom = self.window_height - self.caption_height
         pygame.draw.line(self.screen, self.WHITE,
                         (self.window_width // 2, self.camera_height),
-                        (self.window_width // 2, self.window_height), 2)
+                        (self.window_width // 2, game_bottom), 2)
         
         # Draw scores
         font = pygame.font.Font(None, 74)
@@ -385,12 +390,15 @@ class GameEngine:
         self.screen.blit(score1_text, (self.window_width // 4, self.camera_height + 50))
         self.screen.blit(score2_text, (3 * self.window_width // 4, self.camera_height + 50))
         
-        # Draw speed indicator
+        # Draw speed indicator (moved up to make room for caption bar)
         speed_text = font.render(f"Speed: {self.state.ball_speed_multiplier:.1f}x", True, self.WHITE)
-        self.screen.blit(speed_text, (10, self.window_height - 50))
+        self.screen.blit(speed_text, (10, self.window_height - 90))
         
-        # Draw hand tracking status
+        # Draw hand tracking status (moved up to make room)
         self._draw_hand_status(hand_data)
+        
+        # Draw caption bar with last recognized text
+        self._draw_caption_bar(last_recognized_text, last_word_timestamp)
         
         # Update display
         pygame.display.flip()
@@ -483,11 +491,91 @@ class GameEngine:
                     status_text += f" | P{player['id']}: {gesture} ({y_norm:.2f})"
             
             text_surface = font.render(status_text, True, self.WHITE)
-            self.screen.blit(text_surface, (10, self.window_height - 100))
+            self.screen.blit(text_surface, (10, self.window_height - 140))
         else:
             status_text = "No hands detected"
             text_surface = font.render(status_text, True, (255, 100, 100))
-            self.screen.blit(text_surface, (10, self.window_height - 100))
+            self.screen.blit(text_surface, (10, self.window_height - 140))
+    
+    def _draw_caption_bar(self, last_recognized_text: str, last_word_timestamp: float = 0) -> None:
+        """Draw caption bar showing the last recognized word with color coding.
+        
+        Args:
+            last_recognized_text: The last recognized word from voice recognizer
+            last_word_timestamp: Timestamp when the word was recognized
+        """
+        if not last_recognized_text or last_word_timestamp == 0:
+            return
+        
+        # Calculate fade-out: 2 seconds after recognition
+        elapsed_time = time.time() - last_word_timestamp
+        fade_duration = 2.0  # 2 seconds
+        
+        if elapsed_time > fade_duration:
+            # Fade out complete, don't draw
+            return
+        
+        # Calculate alpha for fade-out (255 = fully visible, 0 = fully transparent)
+        # Linear fade: starts at 255, decreases to 0 over fade_duration seconds
+        alpha = int(255 * (1 - elapsed_time / fade_duration))
+        
+        # Determine color based on the word
+        base_color = self._get_word_color(last_recognized_text)
+        
+        # Draw caption bar at the bottom of the screen
+        bar_y = self.window_height - self.caption_height
+        
+        # Draw background for caption bar with fade-out
+        bg_alpha = int(alpha * 0.1)  # Dark background also fades
+        background_color = (bg_alpha, bg_alpha, bg_alpha)
+        pygame.draw.rect(self.screen, background_color, 
+                        (0, bar_y, self.window_width, self.caption_height))
+        
+        # Draw top border with fade-out
+        border_alpha = int(alpha * 0.3)
+        border_color = (border_alpha, border_alpha, border_alpha)
+        pygame.draw.line(self.screen, border_color,
+                        (0, bar_y),
+                        (self.window_width, bar_y), 1)
+        
+        # Draw caption text with fade-out
+        font = pygame.font.Font(None, 32)
+        text = f"Recognized: {last_recognized_text.upper()}"
+        
+        # Apply alpha to text color
+        text_color = tuple(int(c * alpha / 255) for c in base_color)
+        text_surface = font.render(text, True, text_color)
+        
+        # Center the text in the caption bar
+        text_x = (self.window_width - text_surface.get_width()) // 2
+        text_y = bar_y + (self.caption_height - text_surface.get_height()) // 2
+        self.screen.blit(text_surface, (text_x, text_y))
+    
+    def _get_word_color(self, word: str) -> tuple:
+        """Get the color for a recognized word based on its meaning.
+        
+        Args:
+            word: The recognized word
+            
+        Returns:
+            RGB color tuple
+        """
+        word_lower = word.lower()
+        
+        # Words that indicate faster/more speed - GREEN
+        faster_words = ['faster', 'fast', 'quick', 'quicker', 'speed', 'up', 'more', 'increase']
+        for fast_word in faster_words:
+            if fast_word in word_lower:
+                return self.GREEN
+        
+        # Words that indicate slower/less speed - RED
+        slower_words = ['slower', 'slow', 'down', 'less', 'decrease', 'reduce']
+        for slow_word in slower_words:
+            if slow_word in word_lower:
+                return self.RED
+        
+        # Default color for other words
+        return self.WHITE
     
     def start_game(self, mode: str = 'single') -> None:
         """Start a new game.
