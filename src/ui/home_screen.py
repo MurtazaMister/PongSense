@@ -203,8 +203,8 @@ class HowToPlayScreen:
             {
                 'title': 'Slide 2: Speed Control',
                 'video_path': None,
-                'text': 'Speak "faster" or "slower" to increase/decrease ball speed',
-                'description': 'Use voice commands to control the game speed. Say "faster" to increase ball speed or "slower" to decrease it.'
+                'text': 'Voice: "faster"/"slower" | Keyboard: W/↑ increase, S/↓ decrease',
+                'description': 'Control game speed with voice ("faster"/"slower") or keyboard (W/S or Up/Down arrows) to increase/decrease ball speed.'
             },
             {
                 'title': 'Slide 3: Pause & Resume',

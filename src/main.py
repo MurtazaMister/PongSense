@@ -243,6 +243,9 @@ class PongSenseApp:
                         self.game_mode = 'two_player' if self.game_mode == 'single' else 'single'
                         self.game_engine.start_game(self.game_mode)
                         logger.info(f"Switched to {self.game_mode} mode")
+                    elif event.key in [pygame.K_w, pygame.K_s, pygame.K_UP, pygame.K_DOWN]:
+                        # Keyboard speed controls
+                        self.game_engine.handle_speed_keyboard(event.key)
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 # Handle mouse clicks on pause menu
                 if self.game_engine.state.is_paused:

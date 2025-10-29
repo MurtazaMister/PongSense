@@ -189,6 +189,21 @@ class GameEngine:
                     self.state.exit_requested_by_voice = True
                     logger.info("Exit requested via voice command")
     
+    def handle_speed_keyboard(self, key) -> None:
+        """Handle keyboard input for speed control.
+        
+        Args:
+            key: pygame key constant
+        """
+        if key == pygame.K_w or key == pygame.K_UP:
+            # Increase speed
+            self.state.ball_speed_multiplier = min(2.0, self.state.ball_speed_multiplier + 0.2)
+            logger.info(f"Ball speed increased to {self.state.ball_speed_multiplier} (keyboard)")
+        elif key == pygame.K_s or key == pygame.K_DOWN:
+            # Decrease speed
+            self.state.ball_speed_multiplier = max(0.5, self.state.ball_speed_multiplier - 0.2)
+            logger.info(f"Ball speed decreased to {self.state.ball_speed_multiplier} (keyboard)")
+    
     def _update_paddles(self, input_state: EngineInput) -> None:
         """Update paddle positions based on input."""
         # Convert normalized positions to screen coordinates within game area
