@@ -42,22 +42,30 @@ class HomeScreen:
         # Button dimensions
         self.button_width = 300
         self.button_height = 80
-        self.button_spacing = 20
+        self.button_spacing = 100  # Equal spacing between button centers
         
         # Calculate button positions
         center_x = self.window_width // 2
         center_y = self.window_height // 2
         
+        # Position buttons with equal spacing - centered around screen center
         self.start_button_rect = pygame.Rect(
             center_x - self.button_width // 2,
-            center_y - self.button_height // 2 - 50,
+            center_y - self.button_spacing - self.button_height // 2,
             self.button_width,
             self.button_height
         )
         
         self.how_to_play_button_rect = pygame.Rect(
             center_x - self.button_width // 2,
-            center_y + self.button_height // 2 + 30,
+            center_y - self.button_height // 2,
+            self.button_width,
+            self.button_height
+        )
+        
+        self.quit_button_rect = pygame.Rect(
+            center_x - self.button_width // 2,
+            center_y + self.button_spacing - self.button_height // 2,
             self.button_width,
             self.button_height
         )
@@ -99,6 +107,12 @@ class HomeScreen:
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         return 'quit'
+                    elif event.key == pygame.K_F11:
+                        # Toggle fullscreen
+                        try:
+                            pygame.display.toggle_fullscreen()
+                        except Exception:
+                            pass  # Silently fail if fullscreen toggle not supported
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:  # Left click
                         mouse_pos = pygame.mouse.get_pos()
@@ -110,6 +124,8 @@ class HomeScreen:
                             # If user cancelled, continue showing home screen
                         elif self.how_to_play_button_rect.collidepoint(mouse_pos):
                             return 'how_to_play'
+                        elif self.quit_button_rect.collidepoint(mouse_pos):
+                            return 'quit'
             
             # Render home screen
             self._render(screen)
@@ -138,6 +154,9 @@ class HomeScreen:
         
         # Draw how to play button
         self._draw_button(screen, self.how_to_play_button_rect, "How to Play", self.BLUE)
+        
+        # Draw quit button
+        self._draw_button(screen, self.quit_button_rect, "Quit Game", self.RED)
         
         # Draw instructions
         instructions = [
@@ -222,6 +241,12 @@ class HomeScreen:
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         return None
+                    elif event.key == pygame.K_F11:
+                        # Toggle fullscreen
+                        try:
+                            pygame.display.toggle_fullscreen()
+                        except Exception:
+                            pass  # Silently fail if fullscreen toggle not supported
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:  # Left click
                         mouse_pos = pygame.mouse.get_pos()

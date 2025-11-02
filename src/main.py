@@ -366,6 +366,9 @@ class PongSenseApp:
                     elif event.key in [pygame.K_w, pygame.K_s, pygame.K_UP, pygame.K_DOWN]:
                         # Keyboard speed controls
                         self.game_engine.handle_speed_keyboard(event.key)
+                    elif event.key == pygame.K_F11:
+                        # Toggle fullscreen
+                        self.game_engine.toggle_fullscreen()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 # Handle mouse clicks on pause menu
                 if self.game_engine.state.is_paused:

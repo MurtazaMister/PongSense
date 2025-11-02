@@ -89,7 +89,32 @@ class GameEngine:
         
         # Initialize Pygame
         pygame.init()
-        self.screen = pygame.display.set_mode((self.window_width, self.window_height))
+        # Start in fullscreen mode by default
+        try:
+            # Get the best fullscreen resolution (usually the native screen resolution)
+            fullscreen_modes = pygame.display.list_modes()
+            if fullscreen_modes and len(fullscreen_modes) > 0:
+                # Use the first (largest) available fullscreen mode
+                fullscreen_size = fullscreen_modes[0]
+            else:
+                # Fallback to requested size
+                fullscreen_size = (self.window_width, self.window_height)
+            
+            self.screen = pygame.display.set_mode(
+                fullscreen_size,
+                pygame.FULLSCREEN
+            )
+            # Update window dimensions to match actual fullscreen resolution
+            self.window_width, self.window_height = self.screen.get_size()
+            # Recalculate game area dimensions based on actual resolution
+            self.game_height = self.window_height - self.camera_height - self.caption_height
+            self.is_fullscreen = True
+            logger.info(f"Started in fullscreen mode: {self.window_width}x{self.window_height}")
+        except Exception as e:
+            # Fallback to windowed mode if fullscreen fails
+            self.screen = pygame.display.set_mode((self.window_width, self.window_height))
+            self.is_fullscreen = False
+            logger.warning(f"Failed to start in fullscreen mode, using windowed: {e}")
         pygame.display.set_caption("PongSense")
         
         # Colors
@@ -101,6 +126,13 @@ class GameEngine:
         self.YELLOW = (255, 255, 0)
         self.CYAN = (0, 255, 255)
         self.MAGENTA = (255, 0, 255)
+        
+        # Ping pong table colors
+        self.TABLE_GREEN = (26, 102, 51)  # Dark green table surface
+        self.TABLE_LINE = (255, 255, 255)  # White lines
+        self.PADDLE1_COLOR = (50, 150, 255)  # Blue for player 1
+        self.PADDLE2_COLOR = (255, 100, 50)  # Orange/Red for player 2
+        self.BALL_COLOR = (255, 215, 0)  # Gold/Yellow for ball
         
         # Clock for FPS control
         self.clock = pygame.time.Clock()
@@ -167,7 +199,7 @@ class GameEngine:
         """
         for cmd in voice_cmds:
             if cmd == 'faster':
-                self.state.ball_speed_multiplier = min(2.0, self.state.ball_speed_multiplier + 0.2)
+                self.state.ball_speed_multiplier = min(4.0, self.state.ball_speed_multiplier + 0.2)
                 logger.info(f"Ball speed increased to {self.state.ball_speed_multiplier}")
             elif cmd == 'slower':
                 self.state.ball_speed_multiplier = max(0.5, self.state.ball_speed_multiplier - 0.2)
@@ -197,7 +229,7 @@ class GameEngine:
         """
         if key == pygame.K_w or key == pygame.K_UP:
             # Increase speed
-            self.state.ball_speed_multiplier = min(2.0, self.state.ball_speed_multiplier + 0.2)
+            self.state.ball_speed_multiplier = min(4.0, self.state.ball_speed_multiplier + 0.2)
             logger.info(f"Ball speed increased to {self.state.ball_speed_multiplier} (keyboard)")
         elif key == pygame.K_s or key == pygame.K_DOWN:
             # Decrease speed
@@ -404,23 +436,26 @@ class GameEngine:
                         (0, self.camera_height),
                         (self.window_width, self.camera_height), 2)
         
-        # Draw paddles in game area
-        pygame.draw.rect(self.screen, self.WHITE, 
+        # Draw ping pong table background in game area
+        self._draw_ping_pong_table()
+        
+        # Draw paddles in game area with different colors
+        pygame.draw.rect(self.screen, self.PADDLE1_COLOR, 
                         (self.paddle_margin, self.state.paddle1_y, 
                          self.paddle_width, self.paddle_height))
         
-        pygame.draw.rect(self.screen, self.WHITE,
+        pygame.draw.rect(self.screen, self.PADDLE2_COLOR,
                         (self.window_width - self.paddle_margin - self.paddle_width, 
                          self.state.paddle2_y, self.paddle_width, self.paddle_height))
         
-        # Draw ball
-        pygame.draw.circle(self.screen, self.WHITE,
+        # Draw ball with color
+        pygame.draw.circle(self.screen, self.BALL_COLOR,
                           (int(self.state.ball_x), int(self.state.ball_y)), 
                           self.ball_radius)
         
-        # Draw center line in game area (stops at caption bar)
+        # Draw center line/net in game area (stops at caption bar)
         game_bottom = self.window_height - self.caption_height
-        pygame.draw.line(self.screen, self.WHITE,
+        pygame.draw.line(self.screen, self.TABLE_LINE,
                         (self.window_width // 2, self.camera_height),
                         (self.window_width // 2, game_bottom), 2)
         
@@ -532,6 +567,37 @@ class GameEngine:
             self.screen.blit(error_text, (self.window_width // 2 - 50, self.camera_height // 2))
     
     # Old camera overlay method removed - now using integrated camera view
+    
+    def _draw_ping_pong_table(self) -> None:
+        """Draw ping pong table background in the game area."""
+        game_top = self.camera_height
+        game_bottom = self.window_height - self.caption_height
+        game_area_height = game_bottom - game_top
+        
+        # Draw green table surface
+        pygame.draw.rect(self.screen, self.TABLE_GREEN,
+                        (0, game_top, self.window_width, game_area_height))
+        
+        # Draw white boundary lines (top and bottom)
+        line_thickness = 3
+        pygame.draw.rect(self.screen, self.TABLE_LINE,
+                        (0, game_top, self.window_width, line_thickness))
+        pygame.draw.rect(self.screen, self.TABLE_LINE,
+                        (0, game_bottom - line_thickness, self.window_width, line_thickness))
+        
+        # Draw side boundary lines
+        side_margin = 10
+        pygame.draw.rect(self.screen, self.TABLE_LINE,
+                        (side_margin, game_top, line_thickness, game_area_height))
+        pygame.draw.rect(self.screen, self.TABLE_LINE,
+                        (self.window_width - side_margin - line_thickness, game_top, 
+                         line_thickness, game_area_height))
+        
+        # Draw center service line (horizontal line in middle of table)
+        center_y = game_top + game_area_height // 2
+        pygame.draw.line(self.screen, self.TABLE_LINE,
+                        (side_margin, center_y),
+                        (self.window_width - side_margin, center_y), 2)
     
     def _draw_hand_status(self, hand_data) -> None:
         """Draw hand tracking status information."""
@@ -787,6 +853,51 @@ class GameEngine:
             inst_text = instruction_font.render(instruction, True, (150, 150, 150))
             inst_x = menu_x + (menu_width - inst_text.get_width()) // 2
             self.screen.blit(inst_text, (inst_x, menu_y + menu_height - 30))
+    
+    def toggle_fullscreen(self) -> None:
+        """Toggle fullscreen mode."""
+        try:
+            pygame.display.toggle_fullscreen()
+            self.is_fullscreen = not self.is_fullscreen
+            # Update window dimensions to match actual screen size
+            self.window_width, self.window_height = self.screen.get_size()
+            # Recalculate game area dimensions
+            self.game_height = self.window_height - self.camera_height - self.caption_height
+            logger.info(f"Fullscreen {'enabled' if self.is_fullscreen else 'disabled'}: {self.window_width}x{self.window_height}")
+        except Exception as e:
+            logger.error(f"Error toggling fullscreen: {e}")
+            # Fallback: manually set fullscreen mode
+            try:
+                if not self.is_fullscreen:
+                    # Get best fullscreen resolution
+                    fullscreen_modes = pygame.display.list_modes()
+                    if fullscreen_modes and len(fullscreen_modes) > 0:
+                        fullscreen_size = fullscreen_modes[0]
+                    else:
+                        fullscreen_size = (self.window_width, self.window_height)
+                    
+                    self.screen = pygame.display.set_mode(
+                        fullscreen_size,
+                        pygame.FULLSCREEN
+                    )
+                    self.is_fullscreen = True
+                    # Update dimensions
+                    self.window_width, self.window_height = self.screen.get_size()
+                    self.game_height = self.window_height - self.camera_height - self.caption_height
+                    logger.info(f"Fullscreen enabled (fallback method): {self.window_width}x{self.window_height}")
+                else:
+                    # Return to original windowed size
+                    original_width = config.get('game.window_width', 1280)
+                    original_height = config.get('game.window_height', 720)
+                    self.screen = pygame.display.set_mode((original_width, original_height))
+                    self.is_fullscreen = False
+                    # Update dimensions
+                    self.window_width = original_width
+                    self.window_height = original_height
+                    self.game_height = self.window_height - self.camera_height - self.caption_height
+                    logger.info(f"Fullscreen disabled (fallback method): {self.window_width}x{self.window_height}")
+            except Exception as e2:
+                logger.error(f"Error in fullscreen fallback: {e2}")
     
     def quit(self) -> None:
         """Quit the game engine."""
