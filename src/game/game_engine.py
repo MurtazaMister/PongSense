@@ -478,13 +478,6 @@ class GameEngine:
                         (split_line_x, 0), 
                         (split_line_x, camera_height), 
                         (255, 255, 255), 3)
-                # Add labels for left and right sides
-                cv2.putText(resized_frame, "P1", 
-                           (split_line_x // 4, 30), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
-                cv2.putText(resized_frame, "P2", 
-                           (split_line_x + split_line_x // 4, 30), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
             
             # Draw hand highlights
             if hand_data and 'players' in hand_data:
@@ -514,11 +507,8 @@ class GameEngine:
                                       (hand_x - 30, hand_y - 40), 
                                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
             
-            # Add instructions
-            if self.state.game_mode == 'two_player':
-                cv2.putText(resized_frame, "2-Player Mode - Left side = P1, Right side = P2", 
-                           (10, camera_height - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-            else:
+            # Add instructions (only for single player mode)
+            if self.state.game_mode != 'two_player':
                 cv2.putText(resized_frame, "Camera View - Use FIST or OPEN hand to control paddle", 
                            (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             

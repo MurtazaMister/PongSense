@@ -213,7 +213,7 @@ class HomeScreen:
         # Fade animation state
         fade_alpha = 0
         fade_speed = 15
-        max_fade_alpha = 180
+        max_fade_alpha = 230  # Increased for better readability
         
         while True:
             for event in pygame.event.get():
