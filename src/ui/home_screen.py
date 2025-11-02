@@ -73,21 +73,25 @@ class HomeScreen:
         # Callbacks
         self.on_start_game: Optional[Callable] = None
         self.on_how_to_play: Optional[Callable] = None
+        self.on_toggle_fullscreen: Optional[Callable] = None
         
         # State
         self.is_running = True
         
         logger.info("HomeScreen initialized")
     
-    def set_callbacks(self, start_game_callback: Callable, how_to_play_callback: Callable):
+    def set_callbacks(self, start_game_callback: Callable, how_to_play_callback: Callable, 
+                     toggle_fullscreen_callback: Optional[Callable] = None):
         """Set callback functions for button clicks.
         
         Args:
             start_game_callback: Function to call when start game is clicked
             how_to_play_callback: Function to call when how to play is clicked
+            toggle_fullscreen_callback: Function to call when F11 is pressed (optional)
         """
         self.on_start_game = start_game_callback
         self.on_how_to_play = how_to_play_callback
+        self.on_toggle_fullscreen = toggle_fullscreen_callback
     
     def run(self, screen: pygame.Surface) -> str:
         """Run the home screen.
@@ -109,10 +113,39 @@ class HomeScreen:
                         return 'quit'
                     elif event.key == pygame.K_F11:
                         # Toggle fullscreen
-                        try:
-                            pygame.display.toggle_fullscreen()
-                        except Exception:
-                            pass  # Silently fail if fullscreen toggle not supported
+                        if self.on_toggle_fullscreen:
+                            self.on_toggle_fullscreen()
+                            # Update window dimensions after toggle
+                            self.window_width, self.window_height = screen.get_size()
+                            # Recalculate button positions with new dimensions
+                            center_x = self.window_width // 2
+                            center_y = self.window_height // 2
+                            self.start_button_rect = pygame.Rect(
+                                center_x - self.button_width // 2,
+                                center_y - self.button_spacing - self.button_height // 2,
+                                self.button_width,
+                                self.button_height
+                            )
+                            self.how_to_play_button_rect = pygame.Rect(
+                                center_x - self.button_width // 2,
+                                center_y - self.button_height // 2,
+                                self.button_width,
+                                self.button_height
+                            )
+                            self.quit_button_rect = pygame.Rect(
+                                center_x - self.button_width // 2,
+                                center_y + self.button_spacing - self.button_height // 2,
+                                self.button_width,
+                                self.button_height
+                            )
+                        else:
+                            # Fallback if no callback provided
+                            try:
+                                pygame.display.toggle_fullscreen()
+                                # Update window dimensions
+                                self.window_width, self.window_height = screen.get_size()
+                            except Exception:
+                                pass  # Silently fail if fullscreen toggle not supported
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:  # Left click
                         mouse_pos = pygame.mouse.get_pos()
@@ -243,10 +276,14 @@ class HomeScreen:
                         return None
                     elif event.key == pygame.K_F11:
                         # Toggle fullscreen
-                        try:
-                            pygame.display.toggle_fullscreen()
-                        except Exception:
-                            pass  # Silently fail if fullscreen toggle not supported
+                        if self.on_toggle_fullscreen:
+                            self.on_toggle_fullscreen()
+                        else:
+                            # Fallback if no callback provided
+                            try:
+                                pygame.display.toggle_fullscreen()
+                            except Exception:
+                                pass  # Silently fail if fullscreen toggle not supported
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:  # Left click
                         mouse_pos = pygame.mouse.get_pos()

@@ -857,45 +857,70 @@ class GameEngine:
     def toggle_fullscreen(self) -> None:
         """Toggle fullscreen mode."""
         try:
-            pygame.display.toggle_fullscreen()
-            self.is_fullscreen = not self.is_fullscreen
-            # Update window dimensions to match actual screen size
-            self.window_width, self.window_height = self.screen.get_size()
-            # Recalculate game area dimensions
-            self.game_height = self.window_height - self.camera_height - self.caption_height
-            logger.info(f"Fullscreen {'enabled' if self.is_fullscreen else 'disabled'}: {self.window_width}x{self.window_height}")
+            # Always use explicit set_mode for reliability (especially on Windows)
+            if self.is_fullscreen:
+                # Return to windowed mode
+                original_width = config.get('game.window_width', 1280)
+                original_height = config.get('game.window_height', 720)
+                self.screen = pygame.display.set_mode((original_width, original_height))
+                self.is_fullscreen = False
+                # Update dimensions
+                old_width, old_height = self.window_width, self.window_height
+                self.window_width = original_width
+                self.window_height = original_height
+                self.game_height = self.window_height - self.camera_height - self.caption_height
+                
+                # Rescale game state positions if they exist
+                if hasattr(self.state, 'ball_x') and old_width > 0:
+                    scale_x = self.window_width / old_width
+                    scale_y = self.game_height / (old_height - self.camera_height - self.caption_height)
+                    self.state.ball_x = self.state.ball_x * scale_x
+                    self.state.ball_y = self.camera_height + (self.state.ball_y - self.camera_height) * scale_y
+                    self.state.paddle1_y = self.camera_height + (self.state.paddle1_y - self.camera_height) * scale_y
+                    self.state.paddle2_y = self.camera_height + (self.state.paddle2_y - self.camera_height) * scale_y
+                
+                logger.info(f"Fullscreen disabled: {self.window_width}x{self.window_height}")
+            else:
+                # Switch to fullscreen mode
+                # Get best fullscreen resolution
+                old_width, old_height = self.window_width, self.window_height
+                fullscreen_modes = pygame.display.list_modes()
+                if fullscreen_modes and len(fullscreen_modes) > 0:
+                    fullscreen_size = fullscreen_modes[0]
+                else:
+                    # If no modes available, use current window size
+                    fullscreen_size = (self.window_width, self.window_height)
+                
+                self.screen = pygame.display.set_mode(
+                    fullscreen_size,
+                    pygame.FULLSCREEN
+                )
+                self.is_fullscreen = True
+                # Update dimensions
+                self.window_width, self.window_height = self.screen.get_size()
+                self.game_height = self.window_height - self.camera_height - self.caption_height
+                
+                # Rescale game state positions if they exist
+                if hasattr(self.state, 'ball_x') and old_width > 0:
+                    scale_x = self.window_width / old_width
+                    scale_y = self.game_height / (old_height - self.camera_height - self.caption_height)
+                    self.state.ball_x = self.state.ball_x * scale_x
+                    self.state.ball_y = self.camera_height + (self.state.ball_y - self.camera_height) * scale_y
+                    self.state.paddle1_y = self.camera_height + (self.state.paddle1_y - self.camera_height) * scale_y
+                    self.state.paddle2_y = self.camera_height + (self.state.paddle2_y - self.camera_height) * scale_y
+                
+                logger.info(f"Fullscreen enabled: {self.window_width}x{self.window_height}")
         except Exception as e:
             logger.error(f"Error toggling fullscreen: {e}")
-            # Fallback: manually set fullscreen mode
+            # Try pygame.display.toggle_fullscreen() as fallback
             try:
-                if not self.is_fullscreen:
-                    # Get best fullscreen resolution
-                    fullscreen_modes = pygame.display.list_modes()
-                    if fullscreen_modes and len(fullscreen_modes) > 0:
-                        fullscreen_size = fullscreen_modes[0]
-                    else:
-                        fullscreen_size = (self.window_width, self.window_height)
-                    
-                    self.screen = pygame.display.set_mode(
-                        fullscreen_size,
-                        pygame.FULLSCREEN
-                    )
-                    self.is_fullscreen = True
-                    # Update dimensions
-                    self.window_width, self.window_height = self.screen.get_size()
-                    self.game_height = self.window_height - self.camera_height - self.caption_height
-                    logger.info(f"Fullscreen enabled (fallback method): {self.window_width}x{self.window_height}")
-                else:
-                    # Return to original windowed size
-                    original_width = config.get('game.window_width', 1280)
-                    original_height = config.get('game.window_height', 720)
-                    self.screen = pygame.display.set_mode((original_width, original_height))
-                    self.is_fullscreen = False
-                    # Update dimensions
-                    self.window_width = original_width
-                    self.window_height = original_height
-                    self.game_height = self.window_height - self.camera_height - self.caption_height
-                    logger.info(f"Fullscreen disabled (fallback method): {self.window_width}x{self.window_height}")
+                pygame.display.toggle_fullscreen()
+                self.is_fullscreen = not self.is_fullscreen
+                # Update window dimensions to match actual screen size
+                self.window_width, self.window_height = self.screen.get_size()
+                # Recalculate game area dimensions
+                self.game_height = self.window_height - self.camera_height - self.caption_height
+                logger.info(f"Fullscreen toggled (fallback): {self.window_width}x{self.window_height}")
             except Exception as e2:
                 logger.error(f"Error in fullscreen fallback: {e2}")
     

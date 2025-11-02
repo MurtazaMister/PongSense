@@ -64,7 +64,8 @@ class PongSenseApp:
         # Set up callbacks
         self.home_screen.set_callbacks(
             start_game_callback=self._start_game_from_home,
-            how_to_play_callback=self._show_how_to_play
+            how_to_play_callback=self._show_how_to_play,
+            toggle_fullscreen_callback=self.game_engine.toggle_fullscreen
         )
         
         # Run home screen
