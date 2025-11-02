@@ -75,6 +75,11 @@ class PongSenseApp:
             # Extract mode from result string
             selected_mode = result.split(':', 1)[1]
             self.game_mode = selected_mode
+            # Enable/disable parallel processing based on mode
+            if selected_mode == 'two_player':
+                self.hand_tracker.set_parallel_mode(True)
+            else:
+                self.hand_tracker.set_parallel_mode(False)
             self._start_game_from_home()
         elif result == 'start_game':
             # Fallback for old behavior (defaults to single)
@@ -362,6 +367,11 @@ class PongSenseApp:
                     elif event.key == pygame.K_SPACE:
                         # Toggle game mode (only when not paused)
                         self.game_mode = 'two_player' if self.game_mode == 'single' else 'single'
+                        # Enable/disable parallel processing based on mode
+                        if self.game_mode == 'two_player':
+                            self.hand_tracker.set_parallel_mode(True)
+                        else:
+                            self.hand_tracker.set_parallel_mode(False)
                         self.game_engine.start_game(self.game_mode)
                         logger.info(f"Switched to {self.game_mode} mode")
                     elif event.key in [pygame.K_w, pygame.K_s, pygame.K_UP, pygame.K_DOWN]:

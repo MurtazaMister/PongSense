@@ -49,7 +49,51 @@ class HandTracker:
         self.camera_fps = config.get('camera.fps', 30)
         self.device_id = config.get('camera.device_id', 0)
         
+        # Parallel processing for 2-player mode
+        self.parallel_mode = False
+        self.hands_left = None  # MediaPipe instance for left side
+        self.hands_right = None  # MediaPipe instance for right side
+        self._left_results = None
+        self._right_results = None
+        self._result_lock = threading.Lock()
+        
         # Simple instant switching - whatever hand is visible is primary
+    
+    def set_parallel_mode(self, enabled: bool) -> None:
+        """Enable or disable parallel processing mode for 2-player mode.
+        
+        Args:
+            enabled: True to enable parallel processing (split frame processing)
+        """
+        if self.parallel_mode == enabled:
+            return
+        
+        self.parallel_mode = enabled
+        
+        if enabled:
+            # Initialize separate MediaPipe instances for left and right sides
+            self.hands_left = self.mp_hands.Hands(
+                static_image_mode=False,
+                max_num_hands=1,  # Only one hand per side
+                min_detection_confidence=self.detection_confidence,
+                min_tracking_confidence=self.tracking_confidence
+            )
+            self.hands_right = self.mp_hands.Hands(
+                static_image_mode=False,
+                max_num_hands=1,  # Only one hand per side
+                min_detection_confidence=self.detection_confidence,
+                min_tracking_confidence=self.tracking_confidence
+            )
+            logger.info("Parallel processing mode enabled for 2-player mode")
+        else:
+            # Clean up parallel instances if they exist
+            if self.hands_left:
+                self.hands_left.close()
+                self.hands_left = None
+            if self.hands_right:
+                self.hands_right.close()
+                self.hands_right = None
+            logger.info("Parallel processing mode disabled")
     
     def start(self) -> bool:
         """Start hand tracking.
@@ -62,7 +106,7 @@ class HandTracker:
                 logger.warning("Hand tracker already running")
                 return True
             
-            # Initialize MediaPipe hands
+            # Initialize MediaPipe hands (for non-parallel mode)
             self.hands = self.mp_hands.Hands(
                 static_image_mode=False,
                 max_num_hands=self.max_hands,
@@ -106,6 +150,14 @@ class HandTracker:
             if self.hands:
                 self.hands.close()
             
+            # Clean up parallel mode instances
+            if self.hands_left:
+                self.hands_left.close()
+                self.hands_left = None
+            if self.hands_right:
+                self.hands_right.close()
+                self.hands_right = None
+            
             # Clear frame queue
             while not self.frame_queue.empty():
                 try:
@@ -144,8 +196,11 @@ class HandTracker:
                 # Convert BGR to RGB
                 rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 
-                # Process frame
-                results = self.hands.process(rgb_frame)
+                # Process frame - use parallel mode if enabled
+                if self.parallel_mode and self.hands_left and self.hands_right:
+                    results = self._process_parallel(rgb_frame)
+                else:
+                    results = self.hands.process(rgb_frame)
                 
                 # Draw hand landmarks on frame for visualization
                 annotated_frame = frame.copy()
@@ -186,6 +241,104 @@ class HandTracker:
         
         logger.info("Hand tracking loop ended")
     
+    def _process_parallel(self, rgb_frame: np.ndarray) -> Any:
+        """Process frame in parallel - split left and right halves.
+        
+        Args:
+            rgb_frame: RGB frame to process
+            
+        Returns:
+            Combined MediaPipe results
+        """
+        height, width = rgb_frame.shape[:2]
+        mid_x = width // 2
+        
+        # Split frame into left and right halves
+        left_half = rgb_frame[:, :mid_x]
+        right_half = rgb_frame[:, mid_x:]
+        
+        # Process each half in parallel using threads
+        left_results = [None]
+        right_results = [None]
+        left_done = threading.Event()
+        right_done = threading.Event()
+        
+        def process_left():
+            try:
+                left_results[0] = self.hands_left.process(left_half)
+            except Exception as e:
+                logger.error(f"Error processing left half: {e}")
+            finally:
+                left_done.set()
+        
+        def process_right():
+            try:
+                right_results[0] = self.hands_right.process(right_half)
+            except Exception as e:
+                logger.error(f"Error processing right half: {e}")
+            finally:
+                right_done.set()
+        
+        # Start both threads
+        left_thread = threading.Thread(target=process_left, daemon=True)
+        right_thread = threading.Thread(target=process_right, daemon=True)
+        left_thread.start()
+        right_thread.start()
+        
+        # Wait for both to complete
+        left_done.wait()
+        right_done.wait()
+        
+        # Merge results - adjust coordinates back to full frame
+        return self._merge_hand_results(left_results[0], right_results[0], width, height, mid_x)
+    
+    def _merge_hand_results(self, left_results: Any, right_results: Any, 
+                           full_width: int, full_height: int, mid_x: int) -> Any:
+        """Merge results from left and right halves, adjusting coordinates.
+        
+        Args:
+            left_results: MediaPipe results from left half
+            right_results: MediaPipe results from right half
+            full_width: Full frame width
+            full_height: Full frame height
+            mid_x: X coordinate of the split point
+            
+        Returns:
+            Combined results object with same structure as MediaPipe results
+        """
+        # Create a simple results-like object matching MediaPipe structure
+        class MergedResults:
+            def __init__(self):
+                self.multi_hand_landmarks = []
+                self.multi_handedness = []
+        
+        merged = MergedResults()
+        
+        # Process left side results - MediaPipe returns normalized coordinates (0-1)
+        # Left half: coordinates are 0-1 normalized to left half, need to scale to 0-0.5 for full frame
+        if left_results and left_results.multi_hand_landmarks:
+            for idx, landmarks in enumerate(left_results.multi_hand_landmarks):
+                # Adjust x coordinates directly (MediaPipe landmarks are mutable protobuf objects)
+                for landmark in landmarks.landmark:
+                    landmark.x = landmark.x * 0.5  # Scale 0-1 to 0-0.5
+                
+                merged.multi_hand_landmarks.append(landmarks)
+                if left_results.multi_handedness and idx < len(left_results.multi_handedness):
+                    merged.multi_handedness.append(left_results.multi_handedness[idx])
+        
+        # Process right side results - adjust x from 0-1 (right half) to 0.5-1 (full frame)
+        if right_results and right_results.multi_hand_landmarks:
+            for idx, landmarks in enumerate(right_results.multi_hand_landmarks):
+                # Adjust x coordinates directly
+                for landmark in landmarks.landmark:
+                    landmark.x = 0.5 + (landmark.x * 0.5)  # Map 0-1 to 0.5-1
+                
+                merged.multi_hand_landmarks.append(landmarks)
+                if right_results.multi_handedness and idx < len(right_results.multi_handedness):
+                    merged.multi_handedness.append(right_results.multi_handedness[idx])
+        
+        return merged
+    
     def _extract_hand_data(self, results, frame_shape: Tuple[int, int, int]) -> List[Dict[str, Any]]:
         """Extract hand data from MediaPipe results.
         
@@ -201,8 +354,12 @@ class HandTracker:
         if results.multi_hand_landmarks:
             for idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
                 # Get hand classification (left/right)
-                handedness = results.multi_handedness[idx]
-                hand_label = handedness.classification[0].label
+                if results.multi_handedness and idx < len(results.multi_handedness):
+                    handedness = results.multi_handedness[idx]
+                    hand_label = handedness.classification[0].label
+                else:
+                    hand_label = 'Unknown'
+                    handedness = None
                 
                 # Calculate center point (using middle finger MCP)
                 landmark = hand_landmarks.landmark[9]  # Middle finger MCP
@@ -226,7 +383,7 @@ class HandTracker:
                     'x': x,
                     'y': y,
                     'hand_label': hand_label,
-                    'confidence': handedness.classification[0].score,
+                    'confidence': handedness.classification[0].score if handedness else 0.5,
                     'hand_id': hand_label,
                     'is_primary': is_primary
                 }
