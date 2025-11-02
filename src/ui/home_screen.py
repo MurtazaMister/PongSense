@@ -417,7 +417,7 @@ class HowToPlayScreen:
             {
                 'title': 'Slide 2: Speed Control',
                 'video_path': None,
-                'text': 'Voice: "faster"/"slower" | Keyboard: W/↑ increase, S/↓ decrease',
+                'text': 'Voice: "faster"/"slower" | Keyboard: W/Up arrow increase, S/Down arrow decrease',
                 'description': 'Control game speed with voice ("faster"/"slower") or keyboard (W/S or Up/Down arrows) to increase/decrease ball speed.'
             },
             {
@@ -636,9 +636,9 @@ class HowToPlayScreen:
         # Draw icon or text based on current slide
         slide = self.slides[self.current_slide]
         if slide['title'] == 'Slide 2: Speed Control':
-            icon_text = self.text_font.render("🎤 Speed Commands", True, self.WHITE)
+            icon_text = self.text_font.render("Speed Commands", True, self.WHITE)
         elif slide['title'] == 'Slide 3: Pause & Resume':
-            icon_text = self.text_font.render("🎤 Game Control", True, self.WHITE)
+            icon_text = self.text_font.render("Game Control", True, self.WHITE)
         else:
             icon_text = self.text_font.render("Voice Commands", True, self.WHITE)
         
