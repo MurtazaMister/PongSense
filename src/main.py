@@ -5,7 +5,7 @@ Main application entry point for PongSense.
 import sys
 import time
 import threading
-from typing import Optional
+from typing import Optional, Callable
 
 from vision.hand_tracker import HandTracker
 from audio.voice_recognizer import VoiceRecognizer
@@ -13,6 +13,7 @@ from game.game_engine import GameEngine, EngineInput
 from game.ai_opponent import AIOpponent
 from multimodal.input_manager import InputManager
 from ui.home_screen import HomeScreen, HowToPlayScreen
+from ui.loading_screen import LoadingScreen
 from utils.logger import logger
 from utils.config import config
 
@@ -34,6 +35,7 @@ class PongSenseApp:
         # Initialize UI components
         self.home_screen = HomeScreen(self.game_engine.window_width, self.game_engine.window_height)
         self.how_to_play_screen = HowToPlayScreen(self.game_engine.window_width, self.game_engine.window_height)
+        self.loading_screen = LoadingScreen(self.game_engine.window_width, self.game_engine.window_height)
         
         self.is_running = False
         self.game_mode = 'single'  # 'single' or 'two_player'
@@ -79,13 +81,15 @@ class PongSenseApp:
         """Start the game from home screen."""
         logger.info("Starting game from home screen...")
         
-        # Start subsystems
-        if not self._start_subsystems():
-            logger.error("Failed to start subsystems")
-            return
+        # Show loading screen with progress tracking
+        success = self.loading_screen.show_loading_with_progress(
+            self.game_engine.screen,
+            self._initialize_game_with_progress
+        )
         
-        # Perform calibration
-        self._perform_calibration()
+        if not success:
+            logger.error("Failed to initialize game")
+            return
         
         # Start game
         self.game_engine.start_game(self.game_mode)
@@ -97,6 +101,115 @@ class PongSenseApp:
             # Cleanup everything and return to home
             self._cleanup_game_resources()
             self._show_home_screen()
+    
+    def _initialize_game_with_progress(self, update_progress: Callable[[float, str], bool]) -> bool:
+        """Initialize game subsystems with progress updates.
+        
+        Args:
+            update_progress: Function to call with (progress, message) to update loading screen
+            
+        Returns:
+            True if initialization successful, False otherwise
+        """
+        try:
+            # Progress stages:
+            # 0-20%: Starting hand tracker
+            # 20-40%: Starting voice recognizer
+            # 40-70%: Calibration
+            # 70-100%: Finalizing
+            
+            # Start hand tracker (0-20%)
+            if not update_progress(0.0, "Initializing hand tracking..."):
+                return False
+            if not self.hand_tracker.is_running:
+                if not self.hand_tracker.start():
+                    logger.error("Failed to start hand tracker")
+                    return False
+            if not update_progress(0.20, "Hand tracking ready"):
+                return False
+            
+            # Small delay to allow camera to initialize
+            time.sleep(0.1)
+            if not update_progress(0.25, "Starting voice recognition..."):
+                return False
+            
+            # Start voice recognizer (20-40%)
+            if not self.voice_recognizer.is_running:
+                if not self.voice_recognizer.start():
+                    logger.error("Failed to start voice recognizer")
+                    return False
+            if not update_progress(0.40, "Voice recognition ready"):
+                return False
+            
+            # Perform calibration (40-70%)
+            if not update_progress(0.40, "Calibrating hand position..."):
+                return False
+            self._perform_calibration_with_progress(update_progress, start_progress=0.40, end_progress=0.70)
+            
+            # Finalization (70-100%)
+            if not update_progress(0.70, "Finalizing..."):
+                return False
+            time.sleep(0.2)
+            if not update_progress(0.85, "Almost ready..."):
+                return False
+            time.sleep(0.2)
+            if not update_progress(1.0, "Ready!"):
+                return False
+            time.sleep(0.1)
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error during initialization: {e}")
+            return False
+    
+    def _perform_calibration_with_progress(
+        self,
+        update_progress: Callable[[float, str], bool],
+        start_progress: float = 0.4,
+        end_progress: float = 0.7
+    ) -> None:
+        """Perform calibration with progress updates.
+        
+        Args:
+            update_progress: Function to call with (progress, message)
+            start_progress: Starting progress value (0.0 to 1.0)
+            end_progress: Ending progress value (0.0 to 1.0)
+        """
+        logger.info("Performing calibration with progress tracking...")
+        
+        calibration_duration = 3.0
+        start_time = time.time()
+        calibration_samples = []
+        
+        while time.time() - start_time < calibration_duration:
+            elapsed = time.time() - start_time
+            progress_ratio = elapsed / calibration_duration
+            current_progress = start_progress + (end_progress - start_progress) * progress_ratio
+            
+            vision_state = self.hand_tracker.get_state()
+            calibration_samples.append(vision_state)
+            
+            # Update progress with message
+            if not update_progress(
+                current_progress,
+                "Calibrating..."
+            ):
+                # User cancelled
+                logger.info("Calibration cancelled by user")
+                return
+            
+            time.sleep(0.1)
+        
+        # Perform calibration
+        if calibration_samples:
+            if not update_progress(end_progress - 0.05, "Processing calibration data..."):
+                logger.info("Calibration processing cancelled by user")
+                return
+            last_state = calibration_samples[-1]
+            self.input_manager.quick_calibration(last_state, duration=1.0)
+        
+        logger.info("Calibration completed")
     
     def _show_how_to_play(self) -> None:
         """Show how to play tutorial."""

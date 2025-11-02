@@ -6,3 +6,4 @@ test_*.py
 issues.md
 assets/*
 venv/*
+how_to_start.txt
