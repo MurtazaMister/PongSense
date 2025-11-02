@@ -105,6 +105,19 @@ class InputManager:
         """
         players = vision_state.get('players', [])
         
+        # Get camera frame dimensions to determine split point
+        frame = vision_state.get('frame')
+        if frame is not None:
+            try:
+                import cv2
+                camera_width = frame.shape[1]
+            except:
+                camera_width = 640  # Default camera width
+        else:
+            camera_width = 640  # Default camera width
+        
+        camera_midpoint = camera_width / 2
+        
         if mode == 'single':
             # Single player mode: Use primary hand (first detected fist) for Player 1, Player 2 is AI
             p1_y = self._last_known_positions['p1']  # Use last known position
@@ -121,29 +134,37 @@ class InputManager:
                         break
         
         elif mode == 'two_player':
-            # Two player mode: Use primary hand for Player 1, any other hand for Player 2
+            # Two player mode: Split camera horizontally
+            # Left side controls P1, right side controls P2
+            # Middle defaults to P1
             p1_y = self._last_known_positions['p1']  # Use last known position
             p2_y = self._last_known_positions['p2']  # Use last known position
             
             active_players = [p for p in players if p.get('gesture', 'none') in ['fist', 'open']]
             
-            # Find primary hand for Player 1
-            primary_player = None
-            other_players = []
+            # Separate players by camera position
+            left_side_players = []
+            right_side_players = []
             
             for player in active_players:
-                if player.get('is_primary', False):
-                    primary_player = player
+                player_x = player.get('x', camera_width / 2)
+                if player_x < camera_midpoint:
+                    # Left side or middle (defaults to left)
+                    left_side_players.append(player)
                 else:
-                    other_players.append(player)
+                    # Right side
+                    right_side_players.append(player)
             
-            if primary_player:
-                p1_y = self._normalize_player_position(primary_player, 'p1')
+            # Left side players control P1 (left paddle)
+            if left_side_players:
+                # Use the first/primary hand on left side, or just the first one
+                p1_player = left_side_players[0]
+                p1_y = self._normalize_player_position(p1_player, 'p1')
                 self._last_known_positions['p1'] = p1_y
             
-            if other_players:
-                # Use leftmost non-primary hand for Player 2
-                p2_player = min(other_players, key=lambda p: p.get('x', 0))
+            # Right side players control P2 (right paddle)
+            if right_side_players:
+                p2_player = right_side_players[0]
                 p2_y = self._normalize_player_position(p2_player, 'p2')
                 self._last_known_positions['p2'] = p2_y
         

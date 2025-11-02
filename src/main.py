@@ -70,7 +70,14 @@ class PongSenseApp:
         # Run home screen
         result = self.home_screen.run(self.game_engine.screen)
         
-        if result == 'start_game':
+        if result.startswith('mode_selected:'):
+            # Extract mode from result string
+            selected_mode = result.split(':', 1)[1]
+            self.game_mode = selected_mode
+            self._start_game_from_home()
+        elif result == 'start_game':
+            # Fallback for old behavior (defaults to single)
+            self.game_mode = 'single'
             self._start_game_from_home()
         elif result == 'how_to_play':
             self._show_how_to_play()

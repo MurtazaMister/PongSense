@@ -469,6 +469,23 @@ class GameEngine:
             # Resize camera frame maintaining aspect ratio
             resized_frame = cv2.resize(camera_frame, (camera_width, camera_height))
             
+            # Draw vertical split line for 2-player mode
+            if self.state.game_mode == 'two_player':
+                # Calculate the midpoint of the camera frame
+                split_line_x = camera_width // 2
+                # Draw a visible vertical line (white, 3px thick)
+                cv2.line(resized_frame, 
+                        (split_line_x, 0), 
+                        (split_line_x, camera_height), 
+                        (255, 255, 255), 3)
+                # Add labels for left and right sides
+                cv2.putText(resized_frame, "P1", 
+                           (split_line_x // 4, 30), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+                cv2.putText(resized_frame, "P2", 
+                           (split_line_x + split_line_x // 4, 30), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+            
             # Draw hand highlights
             if hand_data and 'players' in hand_data:
                 for player in hand_data['players']:
@@ -498,8 +515,12 @@ class GameEngine:
                                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
             
             # Add instructions
-            cv2.putText(resized_frame, "Camera View - Use FIST or OPEN hand to control paddle", 
-                       (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            if self.state.game_mode == 'two_player':
+                cv2.putText(resized_frame, "2-Player Mode - Left side = P1, Right side = P2", 
+                           (10, camera_height - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            else:
+                cv2.putText(resized_frame, "Camera View - Use FIST or OPEN hand to control paddle", 
+                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             
             # Convert to pygame surface
             frame_rgb = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2RGB)

@@ -88,7 +88,7 @@ class HomeScreen:
             screen: Pygame surface to render on
             
         Returns:
-            'start_game' or 'how_to_play' based on user selection
+            'start_game', 'how_to_play', or 'mode_selected:{mode}' based on user selection
         """
         clock = pygame.time.Clock()
         
@@ -103,7 +103,11 @@ class HomeScreen:
                     if event.button == 1:  # Left click
                         mouse_pos = pygame.mouse.get_pos()
                         if self.start_button_rect.collidepoint(mouse_pos):
-                            return 'start_game'
+                            # Show mode selection overlay
+                            selected_mode = self._show_mode_selection(screen)
+                            if selected_mode:
+                                return f'mode_selected:{selected_mode}'
+                            # If user cancelled, continue showing home screen
                         elif self.how_to_play_button_rect.collidepoint(mouse_pos):
                             return 'how_to_play'
             
@@ -149,6 +153,154 @@ class HomeScreen:
         """Draw a button with text."""
         # Check if mouse is hovering
         mouse_pos = pygame.mouse.get_pos()
+        is_hovered = rect.collidepoint(mouse_pos)
+        
+        # Button color
+        button_color = self.LIGHT_BLUE if is_hovered else color
+        
+        # Draw button background
+        pygame.draw.rect(screen, button_color, rect)
+        pygame.draw.rect(screen, self.WHITE, rect, 3)
+        
+        # Draw button text
+        text_surface = self.button_font.render(text, True, self.WHITE)
+        text_rect = text_surface.get_rect(center=rect.center)
+        screen.blit(text_surface, text_rect)
+    
+    def _show_mode_selection(self, screen: pygame.Surface) -> Optional[str]:
+        """Show mode selection overlay.
+        
+        Args:
+            screen: Pygame surface to render on
+            
+        Returns:
+            Selected mode ('single' or 'two_player'), or None if cancelled
+        """
+        clock = pygame.time.Clock()
+        
+        # Mode selection button dimensions
+        mode_button_width = 350
+        mode_button_height = 100
+        mode_button_spacing = 30
+        
+        # Calculate button positions (centered vertically)
+        center_x = self.window_width // 2
+        center_y = self.window_height // 2
+        
+        ai_button_rect = pygame.Rect(
+            center_x - mode_button_width // 2,
+            center_y - mode_button_height - mode_button_spacing // 2,
+            mode_button_width,
+            mode_button_height
+        )
+        
+        two_player_button_rect = pygame.Rect(
+            center_x - mode_button_width // 2,
+            center_y + mode_button_spacing // 2,
+            mode_button_width,
+            mode_button_height
+        )
+        
+        # Close button (X) in top right
+        close_button_size = 40
+        close_button_rect = pygame.Rect(
+            self.window_width - close_button_size - 20,
+            20,
+            close_button_size,
+            close_button_size
+        )
+        
+        # Fade animation state
+        fade_alpha = 0
+        fade_speed = 15
+        max_fade_alpha = 180
+        
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return None
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        return None
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1:  # Left click
+                        mouse_pos = pygame.mouse.get_pos()
+                        if close_button_rect.collidepoint(mouse_pos):
+                            return None
+                        elif ai_button_rect.collidepoint(mouse_pos):
+                            return 'single'
+                        elif two_player_button_rect.collidepoint(mouse_pos):
+                            return 'two_player'
+            
+            # Update fade animation
+            if fade_alpha < max_fade_alpha:
+                fade_alpha = min(max_fade_alpha, fade_alpha + fade_speed)
+            
+            # Render
+            self._render_mode_selection(
+                screen, fade_alpha,
+                ai_button_rect, two_player_button_rect, close_button_rect
+            )
+            pygame.display.flip()
+            clock.tick(60)
+    
+    def _render_mode_selection(self, screen: pygame.Surface, fade_alpha: int,
+                              ai_button_rect: pygame.Rect, two_player_button_rect: pygame.Rect,
+                              close_button_rect: pygame.Rect):
+        """Render mode selection overlay.
+        
+        Args:
+            screen: Pygame surface to render on
+            fade_alpha: Alpha value for background fade (0-255)
+            ai_button_rect: Rectangle for AI mode button
+            two_player_button_rect: Rectangle for 2-player mode button
+            close_button_rect: Rectangle for close button
+        """
+        # First render the background home screen
+        self._render(screen)
+        
+        # Draw background overlay (faded)
+        overlay = pygame.Surface((self.window_width, self.window_height))
+        overlay.set_alpha(fade_alpha)
+        overlay.fill(self.BLACK)
+        screen.blit(overlay, (0, 0))
+        
+        # Draw title
+        title_text = self.title_font.render("Select Game Mode", True, self.WHITE)
+        title_rect = title_text.get_rect(center=(self.window_width // 2, 150))
+        screen.blit(title_text, title_rect)
+        
+        # Draw buttons
+        mouse_pos = pygame.mouse.get_pos()
+        self._draw_mode_button(screen, ai_button_rect, "Play with AI", self.GREEN, 
+                              mouse_pos)
+        self._draw_mode_button(screen, two_player_button_rect, "2-Player Mode", self.BLUE, 
+                              mouse_pos)
+        
+        # Draw close button (X)
+        is_hovered = close_button_rect.collidepoint(mouse_pos)
+        close_color = self.RED if is_hovered else self.GRAY
+        pygame.draw.rect(screen, close_color, close_button_rect)
+        pygame.draw.rect(screen, self.WHITE, close_button_rect, 2)
+        
+        # Draw X symbol
+        x_font = pygame.font.Font(None, 32)
+        x_text = x_font.render("×", True, self.WHITE)
+        x_rect = x_text.get_rect(center=close_button_rect.center)
+        screen.blit(x_text, x_rect)
+    
+    def _draw_mode_button(self, screen: pygame.Surface, rect: pygame.Rect, 
+                         text: str, color: tuple, mouse_pos: tuple):
+        """Draw a mode selection button.
+        
+        Args:
+            screen: Pygame surface to render on
+            rect: Button rectangle
+            text: Button text
+            color: Base button color
+            mouse_pos: Current mouse position
+        """
+        # Check if mouse is hovering
         is_hovered = rect.collidepoint(mouse_pos)
         
         # Button color
