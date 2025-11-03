@@ -310,8 +310,16 @@ class PongSenseApp:
                     ball_y_norm = ball_y_in_game_area / self.game_engine.game_height
                     ball_x_norm = game_state.ball_x / self.game_engine.window_width
                     
-                    # Predict AI paddle position based on ball position
-                    ai_target = self.ai_opponent.next_y(ball_y_norm, 'medium', ball_x_norm)
+                    # Adjust target to center paddle on ball (not align top of paddle)
+                    # paddle_y represents the TOP of the paddle, so we need to offset by half paddle height
+                    paddle_half_height_norm = (self.game_engine.paddle_height / 2.0) / self.game_engine.game_height
+                    centered_target = ball_y_norm - paddle_half_height_norm
+                    
+                    # Predict AI paddle position based on centered ball position
+                    ai_target = self.ai_opponent.next_y(centered_target, 'medium', ball_x_norm)
+                    
+                    # Clamp to valid range (0.0 to 1.0)
+                    ai_target = max(0.0, min(1.0, ai_target))
                     engine_input.p2_y = ai_target
                 
                 # Update game (tick will skip updates if paused)

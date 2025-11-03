@@ -4,8 +4,6 @@
 
 PongSense is a revolutionary take on the classic Pong game, combining cutting-edge computer vision and speech recognition to create an immersive, hands-free gaming experience. Wave your fist to control your paddle, speak commands to adjust game speed, and enjoy smooth gameplay powered by MediaPipe and Vosk.
 
-![PongSense Banner](https://via.placeholder.com/800x200/4A90E2/FFFFFF?text=PongSense+-+Multimodal+Pong+Game)
-
 ---
 
 ## ✨ Features
