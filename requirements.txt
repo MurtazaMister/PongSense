@@ -1,8 +1,8 @@
-opencv-python>=4.8.0
+SpeechRecognition>=3.14.0
 mediapipe>=0.10.0
-pygame>=2.5.0
-SpeechRecognition>=3.10.0
-pyaudio>=0.2.11
-numpy>=1.24.0
-pyyaml>=6.0
-vosk>=0.3.45
+numpy>=2.2.0
+opencv-python>=4.12.0
+pyaudio>=0.2.0
+pygame>=2.6.0
+pyyaml>=6.0.0
+vosk>=0.3.0

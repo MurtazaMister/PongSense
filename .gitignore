@@ -7,3 +7,4 @@ issues.md
 assets/*
 venv/*
 how_to_start.txt
+generate_requirements.py
